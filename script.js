@@ -2,6 +2,9 @@ let tasks = JSON.parse(localStorage.getItem('nexus_tasks_v3')) || [];
 let theme = localStorage.getItem('nexus_theme') || 'light';
 let boardTitle = localStorage.getItem('nexus_title') || 'Sprint Semanal';
 
+let currentTagFilter = 'all';
+let currentPriorityFilter = 'all';
+
 document.addEventListener('DOMContentLoaded', () => {
     document.body.setAttribute('data-theme', theme);
     document.getElementById('boardTitle').innerText = boardTitle;
@@ -22,6 +25,12 @@ function toggleTheme() {
 function saveTitle() {
     boardTitle = document.getElementById('boardTitle').innerText;
     localStorage.setItem('nexus_title', boardTitle);
+}
+
+function applyFilters() {
+    currentTagFilter = document.getElementById('filterTag').value;
+    currentPriorityFilter = document.getElementById('filterPriority').value;
+    render();
 }
 
 function addTask() {
@@ -52,7 +61,13 @@ function save() {
 function render() {
     document.querySelectorAll('.tasks-container').forEach(c => c.innerHTML = '');
 
-    tasks.forEach(t => {
+    const filteredTasks = tasks.filter(t => {
+        const matchTag = currentTagFilter === 'all' || t.tag === currentTagFilter;
+        const matchPriority = currentPriorityFilter === 'all' || t.priority === currentPriorityFilter;
+        return matchTag && matchPriority;
+    });
+
+    filteredTasks.forEach(t => {
         const card = document.createElement('div');
         card.className = `card ${t.status === 'done' ? 'finalizado' : ''}`;
         card.id = t.id;
@@ -74,11 +89,13 @@ function render() {
             </div>
         `;
 
-        const container = document.getElementById(t.status).querySelector('.tasks-container');
-        container.appendChild(card);
+        const colElement = document.getElementById(t.status);
+        if (colElement) {
+            colElement.querySelector('.tasks-container').appendChild(card);
+        }
     });
 
-    updateMetrics();
+    updateMetrics(filteredTasks);
 }
 
 function updateText(id, el) {
@@ -100,10 +117,10 @@ function clearAllDone() {
     }
 }
 
-function updateMetrics() {
+function updateMetrics(taskList = tasks) {
     const counts = { todo: 0, doing: 0, done: 0 };
 
-    tasks.forEach(t => {
+    taskList.forEach(t => {
         if (counts.hasOwnProperty(t.status)) counts[t.status]++;
     });
 
@@ -112,7 +129,7 @@ function updateMetrics() {
         if (el) el.innerText = counts[status];
     }
 
-    const total = tasks.length;
+    const total = taskList.length;
     const done = counts.done;
     const percent = total === 0 ? 0 : Math.round((done / total) * 100);
 

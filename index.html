@@ -29,7 +29,24 @@
             <span class="editable-title" id="boardTitle" contenteditable="true" onblur="saveTitle()">Sprint
                 Semanal</span>
         </div>
-        <div style="font-weight: 800; font-size: 0.9rem; color: #4f46e5;">SPRINT PRO</div>
+
+        <div class="filter-wrapper">
+            <select id="filterTag" onchange="applyFilters()" class="filter-select">
+                <option value="all">🏷️ Todas as Tags</option>
+                <option value="💻 Desenvolvimento">💻 Dev</option>
+                <option value="🐛 Bug Fix">🐛 Bug Fix</option>
+                <option value="🏋️ Crossfit">🏋️ Crossfit</option>
+                <option value="📅 Reunião">📅 Reunião</option>
+                <option value="🚀 Deploy">🚀 Deploy</option>
+            </select>
+
+            <select id="filterPriority" onchange="applyFilters()" class="filter-select">
+                <option value="all">📶 Prioridade: Todas</option>
+                <option value="Alta">🔴 Alta</option>
+                <option value="Média">🟡 Média</option>
+                <option value="Baixa">🔵 Baixa</option>
+            </select>
+        </div>
     </header>
 
     <div class="input-bar">
