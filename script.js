@@ -198,6 +198,7 @@ function render() {
 
 function setupDragAndDrop() {
     const containers = document.querySelectorAll('.tasks-container');
+
     containers.forEach(container => {
         new Sortable(container, {
             group: 'shared',
@@ -205,11 +206,13 @@ function setupDragAndDrop() {
             ghostClass: 'sortable-ghost',
             delay: 100,
             delayOnTouchOnly: true,
+
             onEnd: function (evt) {
                 const itemEl = evt.item;
                 const newStatus = evt.to.getAttribute('data-status');
-                const task = tasks.find(t => t.id === itemEl.id);
+                const taskId = itemEl.id;
 
+                const task = tasks.find(t => t.id === taskId);
                 if (task) {
                     const targetCol = columns.find(c => c.id === newStatus);
                     const isDoneTarget = targetCol && (targetCol.id === 'done' || targetCol.title.toLowerCase().includes('conclu'));
@@ -224,8 +227,25 @@ function setupDragAndDrop() {
                     }
 
                     task.status = newStatus;
-                    save();
                 }
+
+                const allCards = document.querySelectorAll('.card');
+                const newOrderIds = Array.from(allCards).map(card => card.id);
+
+                const reorderedTasks = [];
+                const visibleTasksMap = new Map(tasks.map(t => [t.id, t]));
+
+                newOrderIds.forEach(id => {
+                    if (visibleTasksMap.has(id)) {
+                        reorderedTasks.push(visibleTasksMap.get(id));
+                        visibleTasksMap.delete(id);
+                    }
+                });
+
+                const hiddenTasks = Array.from(visibleTasksMap.values());
+                tasks = [...reorderedTasks, ...hiddenTasks];
+
+                save();
             }
         });
     });
@@ -238,14 +258,13 @@ function openModal(taskId = null, initialStatus = null) {
     const modalTitle = document.getElementById('modalTitle');
 
     clearModalFields();
-    switchDescTab('write');
 
     if (taskId) {
         editingTaskId = taskId;
         const task = tasks.find(t => t.id === taskId);
         if (!task) return;
 
-        modalTitle.innerText = "Editar Tarefa";
+        modalTitle.innerText = "Detalhes da Tarefa";
         saveBtn.innerText = "Atualizar";
         deleteBtn.style.display = 'block';
 
@@ -261,6 +280,8 @@ function openModal(taskId = null, initialStatus = null) {
 
         saveBtn.onclick = () => saveTaskBtnClick();
 
+        switchDescTab('preview');
+
     } else {
         editingTaskId = null;
         modalTitle.innerText = "Nova Tarefa";
@@ -274,8 +295,11 @@ function openModal(taskId = null, initialStatus = null) {
         const defaultStatus = initialStatus || (columns.length > 0 ? columns[0].id : 'todo');
         saveBtn.onclick = () => saveTaskBtnClick(defaultStatus);
 
+        switchDescTab('write');
+
         setTimeout(() => document.getElementById('modalTaskInput').focus(), 100);
     }
+
     modal.classList.add('active');
 }
 
