@@ -4,7 +4,6 @@ let boardTitle = localStorage.getItem('nexus_title') || 'Sprint Semanal';
 
 let currentTagFilter = 'all';
 let currentPriorityFilter = 'all';
-
 let editingTaskId = null;
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -13,6 +12,13 @@ document.addEventListener('DOMContentLoaded', () => {
     setupDragAndDrop();
     render();
 });
+
+function getTodayString() {
+    const today = new Date();
+    const offset = today.getTimezoneOffset();
+    const localDate = new Date(today.getTime() - (offset * 60 * 1000));
+    return localDate.toISOString().split('T')[0];
+}
 
 function openModal(taskId = null) {
     const modal = document.getElementById('modalOverlay');
@@ -41,10 +47,7 @@ function openModal(taskId = null) {
         modalTitle.innerText = "Nova Tarefa";
         saveBtn.innerText = "Salvar Tarefa";
 
-        const today = new Date();
-        const offset = today.getTimezoneOffset();
-        const localDate = new Date(today.getTime() - (offset * 60 * 1000));
-        document.getElementById('modalDateStart').value = localDate.toISOString().split('T')[0];
+        document.getElementById('modalDateStart').value = getTodayString();
 
         setTimeout(() => document.getElementById('modalTaskInput').focus(), 100);
     }
@@ -184,7 +187,6 @@ function render() {
         }
 
         const descIcon = t.description && t.description.trim() !== '' ? '<span class="has-desc-icon" title="Ver descrição detalhada">📄</span>' : '';
-
         const prioColor = t.priority === 'Alta' ? '#ef4444' : t.priority === 'Média' ? '#f59e0b' : '#6366f1';
 
         card.innerHTML = `
@@ -259,6 +261,7 @@ function getDragAfterElement(container, y) {
 
 function saveNewOrder() {
     const newTasksOrder = [];
+
     ['todo', 'doing', 'done'].forEach(statusId => {
         const colElement = document.getElementById(statusId);
         const cards = colElement.querySelectorAll('.card');
@@ -266,6 +269,14 @@ function saveNewOrder() {
         cards.forEach(card => {
             const taskObj = tasks.find(t => t.id === card.id);
             if (taskObj) {
+                if (taskObj.status !== 'done' && statusId === 'done') {
+                    taskObj.endDate = getTodayString();
+                }
+
+                if (taskObj.status === 'done' && statusId !== 'done') {
+                    taskObj.endDate = '';
+                }
+
                 taskObj.status = statusId;
                 newTasksOrder.push(taskObj);
             }
