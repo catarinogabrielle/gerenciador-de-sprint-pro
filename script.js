@@ -324,3 +324,31 @@ function updateMetrics(taskList = tasks) {
     if (fill) fill.style.width = percent + '%';
     if (val) val.innerText = percent + '%';
 }
+
+const installBtn = document.getElementById('installPwaBtn');
+
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    installBtn.style.display = 'block';
+});
+
+installBtn.addEventListener('click', async () => {
+    if (deferredPrompt) {
+        deferredPrompt.prompt();
+
+        const { outcome } = await deferredPrompt.userChoice;
+        console.log(`Usuário escolheu: ${outcome}`);
+
+        deferredPrompt = null;
+
+        if (outcome === 'accepted') {
+            installBtn.style.display = 'none';
+        }
+    }
+});
+
+window.addEventListener('appinstalled', () => {
+    console.log('App instalado com sucesso');
+    installBtn.style.display = 'none';
+});
