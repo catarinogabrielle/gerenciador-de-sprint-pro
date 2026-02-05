@@ -6,12 +6,68 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gerenciador de Sprint Pro</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
 </head>
 
 <body>
 
     <div class="overlay" id="overlay" onclick="toggleMenu()"></div>
+
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal-box">
+            <h3 id="modalTitle" style="margin-top:0; margin-bottom: 20px;">Nova Tarefa</h3>
+
+            <div class="form-group">
+                <label>Título da Tarefa</label>
+                <input type="text" id="modalTaskInput" class="input-main" placeholder="Ex: Criar tela de login..."
+                    autofocus>
+            </div>
+
+            <div class="form-group">
+                <label>Descrição Detalhada</label>
+                <textarea id="modalDescriptionInput" class="input-main" rows="4"
+                    placeholder="Insira detalhes, critérios de aceite, links..."></textarea>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Tag</label>
+                    <select id="modalTagInput">
+                        <option value="💻 Desenvolvimento">💻 Desenvolvimento</option>
+                        <option value="🐛 Bug Fix">🐛 Bug Fix</option>
+                        <option value="🏋️ Crossfit">🏋️ Crossfit</option>
+                        <option value="📅 Reunião">📅 Reunião</option>
+                        <option value="🚀 Deploy">🚀 Deploy</option>
+                        <option value="🎨 Design">🎨 Design</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Prioridade</label>
+                    <select id="modalPriorityInput">
+                        <option value="Alta">Alta</option>
+                        <option value="Média">Média</option>
+                        <option value="Baixa">Baixa</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Data Início</label>
+                    <input type="date" id="modalDateStart">
+                </div>
+                <div class="form-group">
+                    <label>Data Final (Opcional)</label>
+                    <input type="date" id="modalDateEnd">
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="closeModal()">Cancelar</button>
+                <button class="btn-primary" id="modalSaveBtn" onclick="saveTaskBtnClick()">Salvar</button>
+            </div>
+        </div>
+    </div>
 
     <nav class="sidebar" id="sidebar">
         <h2 style="font-weight: 800; font-size: 1.2rem; margin-bottom: 2rem;">Configurações</h2>
@@ -38,6 +94,7 @@
                 <option value="🏋️ Crossfit">🏋️ Crossfit</option>
                 <option value="📅 Reunião">📅 Reunião</option>
                 <option value="🚀 Deploy">🚀 Deploy</option>
+                <option value="🎨 Design">🎨 Design</option>
             </select>
 
             <select id="filterPriority" onchange="applyFilters()" class="filter-select">
@@ -49,35 +106,35 @@
         </div>
     </header>
 
-    <div class="input-bar">
-        <input type="text" id="taskInput" class="input-main" placeholder="Descreva sua tarefa técnica ou treino...">
-        <select id="tagInput">
-            <option value="💻 Desenvolvimento">💻 Desenvolvimento</option>
-            <option value="🐛 Bug Fix">🐛 Bug Fix</option>
-            <option value="🏋️ Crossfit">🏋️ Crossfit</option>
-            <option value="📅 Reunião">📅 Reunião</option>
-            <option value="🚀 Deploy">🚀 Deploy</option>
-        </select>
-        <select id="priorityInput">
-            <option value="Alta">Alta</option>
-            <option value="Média">Média</option>
-            <option value="Baixa">Baixa</option>
-        </select>
-        <button class="btn-primary" onclick="addTask()">Adicionar</button>
-    </div>
-
     <main class="board">
-        <div class="column" id="todo" ondrop="drop(event)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)">
-            <div class="column-header"><span>Backlog</span> <span id="count-todo">0</span></div>
+        <div class="column dropzone" id="todo">
+            <div class="column-header">
+                <div class="header-title-group">
+                    <span>Backlog</span>
+                    <button class="btn-add-rounded" onclick="openModal()" title="Adicionar Tarefa">+</button>
+                </div>
+                <span id="count-todo" class="count-badge">0</span>
+            </div>
             <div class="tasks-container"></div>
         </div>
-        <div class="column" id="doing" ondrop="drop(event)" ondragover="allowDrop(event)"
-            ondragleave="dragLeave(event)">
-            <div class="column-header"><span>Em Andamento</span> <span id="count-doing">0</span></div>
+
+        <div class="column dropzone" id="doing">
+            <div class="column-header">
+                <div class="header-title-group">
+                    <span>Em Andamento</span>
+                </div>
+                <span id="count-doing" class="count-badge">0</span>
+            </div>
             <div class="tasks-container"></div>
         </div>
-        <div class="column" id="done" ondrop="drop(event)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)">
-            <div class="column-header"><span>Concluído</span> <span id="count-done">0</span></div>
+
+        <div class="column dropzone" id="done">
+            <div class="column-header">
+                <div class="header-title-group">
+                    <span>Concluído</span>
+                </div>
+                <span id="count-done" class="count-badge">0</span>
+            </div>
             <div class="tasks-container"></div>
         </div>
     </main>
