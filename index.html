@@ -14,7 +14,6 @@
 </head>
 
 <body>
-
     <div class="overlay" id="overlay" onclick="toggleMenu()"></div>
 
     <div class="modal-overlay" id="modalOverlay">
@@ -86,6 +85,34 @@
         </div>
     </div>
 
+    <div class="modal-overlay" id="statsOverlay">
+        <div class="modal-box" style="max-width: 700px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3 style="margin:0;">📊 Relatório da Sprint</h3>
+                <button class="btn-secondary" onclick="closeStatsModal()">Fechar</button>
+            </div>
+
+            <div class="charts-grid">
+                <div class="chart-container">
+                    <h4 class="chart-title">Distribuição por Tags</h4>
+                    <div style="height: 200px; display: flex; justify-content: center;">
+                        <canvas id="tagsChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <h4 class="chart-title">Status das Tarefas</h4>
+                    <div style="height: 200px;">
+                        <canvas id="statusChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div id="statsSummary" class="stats-summary">
+                Carregando análise...
+            </div>
+        </div>
+    </div>
+
     <nav class="sidebar" id="sidebar">
         <h2 style="font-weight: 800; font-size: 1.2rem; margin-bottom: 1.5rem;">Configurações</h2>
 
@@ -98,7 +125,12 @@
             </div>
         </div>
 
-        <button class="btn-primary" style="width: 100%; margin-top: 15px;" onclick="toggleTheme()">🌓 Alternar
+        <button class="btn-primary" style="width: 100%; margin-top: 15px; background: #3b82f6; border-color: #3b82f6;"
+            onclick="openStatsModal()">
+            📊 Ver Relatórios
+        </button>
+
+        <button class="btn-primary" style="width: 100%; margin-top: 12px;" onclick="toggleTheme()">🌓 Alternar
             Tema</button>
 
         <button id="installPwaBtn" class="btn-primary"
@@ -188,6 +220,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <script src="script.js"></script>
 
