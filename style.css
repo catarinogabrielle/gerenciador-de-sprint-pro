@@ -610,6 +610,17 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
   letter-spacing: 0.05em;
   flex-shrink: 0;
   position: relative;
+  cursor: grab;
+}
+
+.column-header:active {
+  cursor: grabbing;
+}
+
+.sortable-ghost-column {
+  opacity: 0.4;
+  background: var(--bg-body);
+  border: 2px dashed var(--text-sub);
 }
 
 .column-title-edit {
