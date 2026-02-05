@@ -433,6 +433,7 @@ textarea:focus {
   color: var(--text-main);
   border: 1px solid var(--border);
 }
+
 @media (max-width: 600px) {
   .charts-grid {
     grid-template-columns: 1fr;
@@ -495,6 +496,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   filter: invert(47%) sepia(68%) saturate(3474%) hue-rotate(357deg)
     brightness(99%) contrast(107%);
 }
+
 input[type="date"]::-webkit-calendar-picker-indicator:hover {
   transform: scale(1.2);
   opacity: 0.8;
@@ -607,12 +609,41 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   flex-shrink: 0;
+  position: relative;
+}
+
+.column-title-edit {
+  border: 1px solid transparent;
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: text;
+  transition: 0.2s;
+  outline: none;
+}
+.column-title-edit:focus {
+  border-color: var(--accent);
+  background: var(--bg-body);
+  color: var(--text-main);
+}
+
+.column-delete-btn {
+  background: none;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  margin-left: 5px;
+}
+
+.column-header:hover .column-delete-btn {
+  opacity: 1;
 }
 
 .header-title-group {
   display: flex;
   align-items: center;
-  gap: 12px;
 }
 
 .count-badge {
