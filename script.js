@@ -4,6 +4,7 @@ let boardTitle = localStorage.getItem('nexus_title') || 'Sprint Semanal';
 
 let currentTagFilter = 'all';
 let currentPriorityFilter = 'all';
+let searchTerm = '';
 let editingTaskId = null;
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -46,9 +47,7 @@ function openModal(taskId = null) {
         editingTaskId = null;
         modalTitle.innerText = "Nova Tarefa";
         saveBtn.innerText = "Salvar Tarefa";
-
         document.getElementById('modalDateStart').value = getTodayString();
-
         setTimeout(() => document.getElementById('modalTaskInput').focus(), 100);
     }
 
@@ -94,6 +93,7 @@ function saveTitle() {
 function applyFilters() {
     currentTagFilter = document.getElementById('filterTag').value;
     currentPriorityFilter = document.getElementById('filterPriority').value;
+    searchTerm = document.getElementById('searchInput').value.toLowerCase();
     render();
 }
 
@@ -167,8 +167,15 @@ function render() {
     const filteredTasks = tasks.filter(t => {
         const matchTag = currentTagFilter === 'all' || t.tag === currentTagFilter;
         const matchPriority = currentPriorityFilter === 'all' || t.priority === currentPriorityFilter;
-        return matchTag && matchPriority;
+
+        const titleMatch = t.text.toLowerCase().includes(searchTerm);
+        const descMatch = t.description && t.description.toLowerCase().includes(searchTerm);
+        const matchSearch = searchTerm === '' || titleMatch || descMatch;
+
+        return matchTag && matchPriority && matchSearch;
     });
+
+    const todayString = getTodayString();
 
     filteredTasks.forEach(t => {
         const card = document.createElement('div');
@@ -179,9 +186,13 @@ function render() {
 
         let dateHtml = '';
         if (t.startDate || t.endDate) {
+            const isOverdue = t.endDate && t.endDate < todayString && t.status !== 'done';
+            const dateClass = isOverdue ? 'date-display overdue' : 'date-display';
+            const icon = isOverdue ? '⚠️ ' : '📅 ';
+
             dateHtml = `
-                <div class="date-display">
-                    📅 ${formatDate(t.startDate)} ${t.endDate ? '- ' + formatDate(t.endDate) : ''}
+                <div class="${dateClass}" title="${isOverdue ? 'Tarefa Atrasada!' : 'Prazo'}">
+                    ${icon} ${formatDate(t.startDate)} ${t.endDate ? '- ' + formatDate(t.endDate) : ''}
                 </div>
             `;
         }
@@ -326,6 +337,7 @@ function updateMetrics(taskList = tasks) {
 }
 
 const installBtn = document.getElementById('installPwaBtn');
+let deferredPrompt;
 
 window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();

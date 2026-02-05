@@ -96,6 +96,9 @@
         </div>
 
         <div class="filter-wrapper">
+            <input type="text" id="searchInput" class="search-input" placeholder="🔍 Buscar..."
+                oninput="applyFilters()">
+
             <select id="filterTag" onchange="applyFilters()" class="filter-select">
                 <option value="all">🏷️ Todas as Tags</option>
                 <option value="💻 Desenvolvimento">💻 Dev</option>
@@ -107,7 +110,7 @@
             </select>
 
             <select id="filterPriority" onchange="applyFilters()" class="filter-select">
-                <option value="all">📶 Prioridade: Todas</option>
+                <option value="all">📶 Prioridade</option>
                 <option value="Alta">🔴 Alta</option>
                 <option value="Média">🟡 Média</option>
                 <option value="Baixa">🔵 Baixa</option>

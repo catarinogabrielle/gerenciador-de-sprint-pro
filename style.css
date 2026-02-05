@@ -19,7 +19,7 @@
   --bg-body: #010409;
   --bg-sidebar: #0d1117;
   --bg-column: #0d1117;
-  --bg-card: #252a31;
+  --bg-card: #161b22;
   --text-main: #e6edf3;
   --text-sub: #848d97;
   --accent: #ff6900;
@@ -75,6 +75,23 @@ header {
   gap: 10px;
 }
 
+.search-input {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-body);
+  color: var(--text-main);
+  font-size: 0.85rem;
+  outline: none;
+  width: 140px;
+  transition: width 0.3s;
+}
+
+.search-input:focus {
+  width: 200px;
+  border-color: var(--accent);
+}
+
 .filter-select {
   padding: 6px 12px;
   width: max-content;
@@ -92,6 +109,7 @@ header {
 .filter-select:hover,
 .filter-select:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(255, 105, 0, 0.1);
 }
 
 .menu-btn {
@@ -220,6 +238,18 @@ header {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 20px;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  transition: 0.3s;
+  filter: invert(47%) sepia(68%) saturate(3474%) hue-rotate(357deg)
+    brightness(99%) contrast(107%);
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  transform: scale(1.2);
+  opacity: 0.8;
 }
 
 .input-main,
@@ -427,6 +457,13 @@ textarea:focus {
   border: 1px solid var(--border);
 }
 
+.date-display.overdue {
+  border-color: #ef4444;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+  font-weight: 700;
+}
+
 .card-text {
   font-size: 14px;
   line-height: 1.5;
@@ -507,6 +544,6 @@ footer {
 }
 
 .column.drag-over {
-  background: rgba(79, 70, 229, 0.08);
+  background: rgba(255, 105, 0, 0.1);
   outline: 2px dashed var(--accent);
 }
