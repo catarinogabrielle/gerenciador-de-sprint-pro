@@ -233,25 +233,6 @@ header {
   flex: 1;
 }
 
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 20px;
-}
-
-input[type="date"]::-webkit-calendar-picker-indicator {
-  cursor: pointer;
-  transition: 0.3s;
-  filter: invert(47%) sepia(68%) saturate(3474%) hue-rotate(357deg)
-    brightness(99%) contrast(107%);
-}
-
-input[type="date"]::-webkit-calendar-picker-indicator:hover {
-  transform: scale(1.2);
-  opacity: 0.8;
-}
-
 .input-main,
 select,
 input[type="date"],
@@ -273,6 +254,20 @@ select:focus,
 input[type="date"]:focus,
 textarea:focus {
   border-color: var(--accent);
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  transition: 0.3s;
+  width: 18px;
+  height: 18px;
+  padding: 2px;
+  filter: invert(47%) sepia(68%) saturate(3474%) hue-rotate(357deg)
+    brightness(99%) contrast(107%);
+}
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  transform: scale(1.2);
+  opacity: 0.8;
 }
 
 .btn-secondary {
@@ -306,6 +301,22 @@ textarea:focus {
 
 .btn-primary:hover {
   opacity: 0.9;
+}
+
+.btn-delete-modal {
+  background: transparent;
+  border: 1px solid #ef4444;
+  color: #ef4444;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+.btn-delete-modal:hover {
+  background: #ef4444;
+  color: white;
 }
 
 .btn-add-rounded {
@@ -458,10 +469,10 @@ textarea:focus {
 }
 
 .date-display.overdue {
-  border-color: #ef4444;
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
-  font-weight: 700;
+  border: 1px solid #ff2e2e !important;
+  background-color: rgba(255, 46, 46, 0.15) !important;
+  color: #ff2e2e !important;
+  font-weight: 800 !important;
 }
 
 .card-text {
@@ -488,19 +499,6 @@ textarea:focus {
   color: var(--text-sub);
   padding-top: 8px;
   border-top: 1px solid var(--border);
-}
-
-.delete-btn {
-  cursor: pointer;
-  color: red;
-  padding: 4px;
-  z-index: 2;
-  position: relative;
-  transition: scale 0.2s;
-}
-
-.delete-btn:hover {
-  scale: 1.05;
 }
 
 .prio-indicator {

@@ -25,6 +25,7 @@ function openModal(taskId = null) {
     const modal = document.getElementById('modalOverlay');
     const modalTitle = document.getElementById('modalTitle');
     const saveBtn = document.getElementById('modalSaveBtn');
+    const deleteBtn = document.getElementById('modalDeleteBtn');
 
     clearModalFields();
 
@@ -35,6 +36,8 @@ function openModal(taskId = null) {
 
         modalTitle.innerText = "Editar Tarefa";
         saveBtn.innerText = "Atualizar Tarefa";
+
+        deleteBtn.style.display = 'block';
 
         document.getElementById('modalTaskInput').value = task.text;
         document.getElementById('modalDescriptionInput').value = task.description || '';
@@ -47,11 +50,24 @@ function openModal(taskId = null) {
         editingTaskId = null;
         modalTitle.innerText = "Nova Tarefa";
         saveBtn.innerText = "Salvar Tarefa";
+
+        deleteBtn.style.display = 'none';
+
         document.getElementById('modalDateStart').value = getTodayString();
         setTimeout(() => document.getElementById('modalTaskInput').focus(), 100);
     }
 
     modal.classList.add('active');
+}
+
+function deleteTaskFromModal() {
+    if (!editingTaskId) return;
+
+    if (confirm("Tem certeza absoluta que deseja excluir esta tarefa?")) {
+        tasks = tasks.filter(t => t.id !== editingTaskId);
+        save();
+        closeModal();
+    }
 }
 
 function clearModalFields() {
@@ -168,9 +184,10 @@ function render() {
         const matchTag = currentTagFilter === 'all' || t.tag === currentTagFilter;
         const matchPriority = currentPriorityFilter === 'all' || t.priority === currentPriorityFilter;
 
-        const titleMatch = t.text.toLowerCase().includes(searchTerm);
-        const descMatch = t.description && t.description.toLowerCase().includes(searchTerm);
-        const matchSearch = searchTerm === '' || titleMatch || descMatch;
+        const term = searchTerm ? searchTerm.toLowerCase() : '';
+        const titleMatch = t.text.toLowerCase().includes(term);
+        const descMatch = t.description && t.description.toLowerCase().includes(term);
+        const matchSearch = term === '' || titleMatch || descMatch;
 
         return matchTag && matchPriority && matchSearch;
     });
@@ -187,6 +204,7 @@ function render() {
         let dateHtml = '';
         if (t.startDate || t.endDate) {
             const isOverdue = t.endDate && t.endDate < todayString && t.status !== 'done';
+
             const dateClass = isOverdue ? 'date-display overdue' : 'date-display';
             const icon = isOverdue ? '⚠️ ' : '📅 ';
 
@@ -212,7 +230,6 @@ function render() {
                     <div class="dot" style="background:${prioColor}"></div>
                     <span>${t.priority}</span>
                 </div>
-                <span class="delete-btn" onclick="deleteTask(event, '${t.id}')">Excluir</span>
             </div>
         `;
 
@@ -299,14 +316,6 @@ function saveNewOrder() {
 
     tasks = [...newTasksOrder, ...hiddenTasks];
     save();
-}
-
-function deleteTask(event, id) {
-    event.stopPropagation();
-    if (confirm("Tem certeza que deseja excluir esta tarefa?")) {
-        tasks = tasks.filter(t => t.id !== id);
-        save();
-    }
 }
 
 function clearAllDone() {

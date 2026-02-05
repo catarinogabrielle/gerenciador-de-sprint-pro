@@ -7,6 +7,7 @@
     <title>Gerenciador de Sprint Pro</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#010409">
     <link rel="apple-touch-icon" href="assets/icon.png">
@@ -66,9 +67,18 @@
                 </div>
             </div>
 
-            <div class="modal-actions">
-                <button class="btn-secondary" onclick="closeModal()">Cancelar</button>
-                <button class="btn-primary" id="modalSaveBtn" onclick="saveTaskBtnClick()">Salvar</button>
+            <div class="modal-footer"
+                style="display: flex; justify-content: space-between; align-items: center; margin-top: 25px; padding-top: 15px; border-top: 1px solid var(--border);">
+
+                <button id="modalDeleteBtn" class="btn-delete-modal" onclick="deleteTaskFromModal()"
+                    style="display: none;">
+                    🗑️ Excluir
+                </button>
+
+                <div class="modal-actions" style="margin-top: 0; margin-left: auto; display: flex; gap: 10px;">
+                    <button class="btn-secondary" onclick="closeModal()">Cancelar</button>
+                    <button class="btn-primary" id="modalSaveBtn" onclick="saveTaskBtnClick()">Salvar</button>
+                </div>
             </div>
         </div>
     </div>
