@@ -1,4 +1,7 @@
 let tasks = JSON.parse(localStorage.getItem('nexus_tasks_v3')) || [];
+let tags = JSON.parse(localStorage.getItem('nexus_tags')) || [
+    "💻 Desenvolvimento", "🐛 Bug Fix", "🏋️ Treino", "📅 Reunião", "🚀 Deploy", "🎨 Design"
+];
 let theme = localStorage.getItem('nexus_theme') || 'light';
 let boardTitle = localStorage.getItem('nexus_title') || 'Sprint Semanal';
 
@@ -6,13 +9,142 @@ let currentTagFilter = 'all';
 let currentPriorityFilter = 'all';
 let searchTerm = '';
 let editingTaskId = null;
+let tempSubtasks = [];
+
+let timerInterval;
+let timerSeconds = 1500;
+let isTimerRunning = false;
 
 document.addEventListener('DOMContentLoaded', () => {
     document.body.setAttribute('data-theme', theme);
     document.getElementById('boardTitle').innerText = boardTitle;
     setupDragAndDrop();
+    updateTagsDropdown();
     render();
 });
+
+function startTimer() {
+    if (isTimerRunning) return;
+    isTimerRunning = true;
+    timerInterval = setInterval(() => {
+        timerSeconds--;
+        updateTimerDisplay();
+        if (timerSeconds <= 0) {
+            clearInterval(timerInterval);
+            isTimerRunning = false;
+            alert("🍅 Pomodoro Finalizado! Hora de descansar.");
+            resetTimer();
+        }
+    }, 1000);
+}
+
+function resetTimer() {
+    clearInterval(timerInterval);
+    isTimerRunning = false;
+    timerSeconds = 1500;
+    updateTimerDisplay();
+}
+
+function updateTimerDisplay() {
+    const minutes = Math.floor(timerSeconds / 60);
+    const seconds = timerSeconds % 60;
+    document.getElementById('pomodoroTimer').innerText =
+        `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+}
+
+function updateTagsDropdown() {
+    const modalSelect = document.getElementById('modalTagInput');
+    const filterSelect = document.getElementById('filterTag');
+
+    modalSelect.innerHTML = tags.map(t => `<option value="${t}">${t}</option>`).join('');
+
+    filterSelect.innerHTML = `<option value="all">🏷️ Todas as Tags</option>` +
+        tags.map(t => `<option value="${t}">${t}</option>`).join('');
+    filterSelect.value = currentTagFilter;
+}
+
+function addNewTag() {
+    const newTag = prompt("Digite o nome da nova tag (com emoji se quiser):");
+    if (newTag && !tags.includes(newTag)) {
+        tags.push(newTag);
+        localStorage.setItem('nexus_tags', JSON.stringify(tags));
+        updateTagsDropdown();
+    }
+}
+
+function exportData() {
+    const dataStr = JSON.stringify({ tasks, tags, boardTitle });
+    const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+
+    const exportFileDefaultName = 'sprint_pro_backup.json';
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+}
+
+function importData(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function (e) {
+        try {
+            const data = JSON.parse(e.target.result);
+            if (data.tasks) tasks = data.tasks;
+            if (data.tags) {
+                tags = data.tags;
+                localStorage.setItem('nexus_tags', JSON.stringify(tags));
+            }
+            if (data.boardTitle) {
+                boardTitle = data.boardTitle;
+                localStorage.setItem('nexus_title', boardTitle);
+                document.getElementById('boardTitle').innerText = boardTitle;
+            }
+            save();
+            updateTagsDropdown();
+            alert("Backup restaurado com sucesso!");
+        } catch (err) {
+            alert("Erro ao ler arquivo de backup.");
+        }
+    };
+    reader.readAsText(file);
+}
+
+function handleSubtaskEnter(e) {
+    if (e.key === 'Enter') addSubtask();
+}
+
+function addSubtask() {
+    const input = document.getElementById('subtaskInput');
+    const text = input.value.trim();
+    if (text) {
+        tempSubtasks.push({ text: text, done: false });
+        input.value = '';
+        renderSubtasksList();
+    }
+}
+
+function renderSubtasksList() {
+    const container = document.getElementById('subtaskList');
+    container.innerHTML = tempSubtasks.map((st, index) => `
+        <div class="subtask-item">
+            <input type="checkbox" ${st.done ? 'checked' : ''} onchange="toggleSubtask(${index})">
+            <span style="${st.done ? 'text-decoration: line-through; opacity: 0.6;' : ''}">${st.text}</span>
+            <button onclick="removeSubtask(${index})">×</button>
+        </div>
+    `).join('');
+}
+
+function toggleSubtask(index) {
+    tempSubtasks[index].done = !tempSubtasks[index].done;
+    renderSubtasksList();
+}
+
+function removeSubtask(index) {
+    tempSubtasks.splice(index, 1);
+    renderSubtasksList();
+}
 
 function getTodayString() {
     const today = new Date();
@@ -36,7 +168,6 @@ function openModal(taskId = null) {
 
         modalTitle.innerText = "Editar Tarefa";
         saveBtn.innerText = "Atualizar Tarefa";
-
         deleteBtn.style.display = 'block';
 
         document.getElementById('modalTaskInput').value = task.text;
@@ -46,28 +177,20 @@ function openModal(taskId = null) {
         document.getElementById('modalDateStart').value = task.startDate || '';
         document.getElementById('modalDateEnd').value = task.endDate || '';
 
+        tempSubtasks = task.subtasks ? JSON.parse(JSON.stringify(task.subtasks)) : [];
+        renderSubtasksList();
+
     } else {
         editingTaskId = null;
         modalTitle.innerText = "Nova Tarefa";
         saveBtn.innerText = "Salvar Tarefa";
-
         deleteBtn.style.display = 'none';
-
+        tempSubtasks = [];
+        renderSubtasksList();
         document.getElementById('modalDateStart').value = getTodayString();
         setTimeout(() => document.getElementById('modalTaskInput').focus(), 100);
     }
-
     modal.classList.add('active');
-}
-
-function deleteTaskFromModal() {
-    if (!editingTaskId) return;
-
-    if (confirm("Tem certeza absoluta que deseja excluir esta tarefa?")) {
-        tasks = tasks.filter(t => t.id !== editingTaskId);
-        save();
-        closeModal();
-    }
 }
 
 function clearModalFields() {
@@ -75,6 +198,8 @@ function clearModalFields() {
     document.getElementById('modalDescriptionInput').value = '';
     document.getElementById('modalDateStart').value = '';
     document.getElementById('modalDateEnd').value = '';
+    document.getElementById('subtaskInput').value = '';
+    document.getElementById('subtaskList').innerHTML = '';
     document.getElementById('modalTagInput').selectedIndex = 0;
     document.getElementById('modalPriorityInput').selectedIndex = 0;
 }
@@ -85,9 +210,7 @@ function closeModal() {
 }
 
 document.getElementById('modalOverlay').addEventListener('click', (e) => {
-    if (e.target === document.getElementById('modalOverlay')) {
-        closeModal();
-    }
+    if (e.target === document.getElementById('modalOverlay')) closeModal();
 });
 
 function toggleMenu() {
@@ -115,18 +238,13 @@ function applyFilters() {
 
 function saveTaskBtnClick() {
     const titleInput = document.getElementById('modalTaskInput');
-
     if (!titleInput.value.trim()) {
         alert("O título da tarefa é obrigatório.");
         titleInput.focus();
         return;
     }
-
-    if (editingTaskId) {
-        updateExistingTask(editingTaskId);
-    } else {
-        createNewTask();
-    }
+    if (editingTaskId) updateExistingTask(editingTaskId);
+    else createNewTask();
 }
 
 function createNewTask() {
@@ -138,9 +256,9 @@ function createNewTask() {
         priority: document.getElementById('modalPriorityInput').value,
         startDate: document.getElementById('modalDateStart').value,
         endDate: document.getElementById('modalDateEnd').value,
+        subtasks: tempSubtasks,
         status: 'todo'
     };
-
     tasks.push(newTask);
     saveAndClose();
 }
@@ -154,8 +272,17 @@ function updateExistingTask(id) {
         tasks[taskIndex].priority = document.getElementById('modalPriorityInput').value;
         tasks[taskIndex].startDate = document.getElementById('modalDateStart').value;
         tasks[taskIndex].endDate = document.getElementById('modalDateEnd').value;
-
+        tasks[taskIndex].subtasks = tempSubtasks;
         saveAndClose();
+    }
+}
+
+function deleteTaskFromModal() {
+    if (!editingTaskId) return;
+    if (confirm("Tem certeza absoluta que deseja excluir esta tarefa?")) {
+        tasks = tasks.filter(t => t.id !== editingTaskId);
+        save();
+        closeModal();
     }
 }
 
@@ -183,13 +310,10 @@ function render() {
     const filteredTasks = tasks.filter(t => {
         const matchTag = currentTagFilter === 'all' || t.tag === currentTagFilter;
         const matchPriority = currentPriorityFilter === 'all' || t.priority === currentPriorityFilter;
-
         const term = searchTerm ? searchTerm.toLowerCase() : '';
         const titleMatch = t.text.toLowerCase().includes(term);
         const descMatch = t.description && t.description.toLowerCase().includes(term);
-        const matchSearch = term === '' || titleMatch || descMatch;
-
-        return matchTag && matchPriority && matchSearch;
+        return matchTag && matchPriority && (term === '' || titleMatch || descMatch);
     });
 
     const todayString = getTodayString();
@@ -198,38 +322,41 @@ function render() {
         const card = document.createElement('div');
         card.className = `card ${t.status === 'done' ? 'finalizado' : ''}`;
         card.id = t.id;
-        card.draggable = true;
         card.onclick = () => openModal(t.id);
 
         let dateHtml = '';
         if (t.startDate || t.endDate) {
             const isOverdue = t.endDate && t.endDate < todayString && t.status !== 'done';
-
             const dateClass = isOverdue ? 'date-display overdue' : 'date-display';
             const icon = isOverdue ? '⚠️ ' : '📅 ';
+            dateHtml = `<div class="${dateClass}" title="${isOverdue ? 'Atrasada!' : 'Prazo'}">${icon} ${formatDate(t.startDate)} ${t.endDate ? '- ' + formatDate(t.endDate) : ''}</div>`;
+        }
 
-            dateHtml = `
-                <div class="${dateClass}" title="${isOverdue ? 'Tarefa Atrasada!' : 'Prazo'}">
-                    ${icon} ${formatDate(t.startDate)} ${t.endDate ? '- ' + formatDate(t.endDate) : ''}
+        const prioColor = t.priority === 'Alta' ? '#ef4444' : t.priority === 'Média' ? '#f59e0b' : '#6366f1';
+
+        let progressHtml = '';
+        if (t.subtasks && t.subtasks.length > 0) {
+            const total = t.subtasks.length;
+            const done = t.subtasks.filter(s => s.done).length;
+            const pct = Math.round((done / total) * 100);
+            progressHtml = `
+                <div style="font-size: 10px; color: var(--text-sub); margin-top: 5px; display: flex; justify-content: space-between;">
+                    <span>Checklist</span> <span>${done}/${total}</span>
+                </div>
+                <div class="progress-container" style="display: block;">
+                    <div class="progress-bar-card" style="width: ${pct}%"></div>
                 </div>
             `;
         }
 
-        const descIcon = t.description && t.description.trim() !== '' ? '<span class="has-desc-icon" title="Ver descrição detalhada">📄</span>' : '';
-        const prioColor = t.priority === 'Alta' ? '#ef4444' : t.priority === 'Média' ? '#f59e0b' : '#6366f1';
+        const descIcon = t.description && t.description.trim() !== '' ? '<span class="has-desc-icon">📄</span>' : '';
 
         card.innerHTML = `
-            <div class="tag-row">
-                <div class="tag">${t.tag}</div>
-                ${dateHtml}
-                ${descIcon}
-            </div>
+            <div class="tag-row"><div class="tag">${t.tag}</div>${dateHtml}${descIcon}</div>
             <span class="card-text">${t.text}</span>
+            ${progressHtml}
             <div class="card-footer">
-                <div class="prio-indicator">
-                    <div class="dot" style="background:${prioColor}"></div>
-                    <span>${t.priority}</span>
-                </div>
+                <div class="prio-indicator"><div class="dot" style="background:${prioColor}"></div><span>${t.priority}</span></div>
             </div>
         `;
 
@@ -237,85 +364,61 @@ function render() {
         if (colElement) {
             colElement.querySelector('.tasks-container').appendChild(card);
         }
-
-        card.addEventListener('dragstart', () => {
-            card.classList.add('dragging');
-        });
-
-        card.addEventListener('dragend', () => {
-            card.classList.remove('dragging');
-            saveNewOrder();
-        });
     });
 
     updateMetrics(filteredTasks);
 }
 
 function setupDragAndDrop() {
-    const columns = document.querySelectorAll('.column');
+    const columns = ['todo', 'doing', 'done'];
+    columns.forEach(colId => {
+        const container = document.querySelector(`#${colId} .tasks-container`);
+        new Sortable(container, {
+            group: 'shared',
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            onEnd: function (evt) {
+                const itemEl = evt.item;
+                const newStatus = evt.to.getAttribute('data-status');
+                const taskId = itemEl.id;
 
-    columns.forEach(column => {
-        const container = column.querySelector('.tasks-container');
-
-        container.addEventListener('dragover', e => {
-            e.preventDefault();
-            const draggable = document.querySelector('.dragging');
-            if (!draggable) return;
-
-            const afterElement = getDragAfterElement(container, e.clientY);
-
-            if (afterElement == null) {
-                container.appendChild(draggable);
-            } else {
-                container.insertBefore(draggable, afterElement);
+                const task = tasks.find(t => t.id === taskId);
+                if (task) {
+                    if (task.status !== 'done' && newStatus === 'done') {
+                        task.endDate = getTodayString();
+                        fireConfetti();
+                    }
+                    if (task.status === 'done' && newStatus !== 'done') {
+                        task.endDate = '';
+                    }
+                    task.status = newStatus;
+                    save();
+                }
             }
         });
     });
 }
 
-function getDragAfterElement(container, y) {
-    const draggableElements = [...container.querySelectorAll('.card:not(.dragging)')];
-
-    return draggableElements.reduce((closest, child) => {
-        const box = child.getBoundingClientRect();
-        const offset = y - box.top - box.height / 2;
-        if (offset < 0 && offset > closest.offset) {
-            return { offset: offset, element: child };
-        } else {
-            return closest;
-        }
-    }, { offset: Number.NEGATIVE_INFINITY }).element;
-}
-
-function saveNewOrder() {
-    const newTasksOrder = [];
-
-    ['todo', 'doing', 'done'].forEach(statusId => {
-        const colElement = document.getElementById(statusId);
-        const cards = colElement.querySelectorAll('.card');
-
-        cards.forEach(card => {
-            const taskObj = tasks.find(t => t.id === card.id);
-            if (taskObj) {
-                if (taskObj.status !== 'done' && statusId === 'done') {
-                    taskObj.endDate = getTodayString();
-                }
-
-                if (taskObj.status === 'done' && statusId !== 'done') {
-                    taskObj.endDate = '';
-                }
-
-                taskObj.status = statusId;
-                newTasksOrder.push(taskObj);
-            }
+function fireConfetti() {
+    const end = Date.now() + 1000;
+    const colors = ['#ff6900', '#ffffff'];
+    (function frame() {
+        confetti({
+            particleCount: 2,
+            angle: 60,
+            spread: 55,
+            origin: { x: 0 },
+            colors: colors
         });
-    });
-
-    const visibleIds = newTasksOrder.map(t => t.id);
-    const hiddenTasks = tasks.filter(t => !visibleIds.includes(t.id));
-
-    tasks = [...newTasksOrder, ...hiddenTasks];
-    save();
+        confetti({
+            particleCount: 2,
+            angle: 120,
+            spread: 55,
+            origin: { x: 1 },
+            colors: colors
+        });
+        if (Date.now() < end) requestAnimationFrame(frame);
+    }());
 }
 
 function clearAllDone() {
@@ -329,47 +432,35 @@ function clearAllDone() {
 function updateMetrics(taskList = tasks) {
     const counts = { todo: 0, doing: 0, done: 0 };
     taskList.forEach(t => { if (counts.hasOwnProperty(t.status)) counts[t.status]++; });
-
     for (let status in counts) {
         const el = document.getElementById(`count-${status}`);
         if (el) el.innerText = counts[status];
     }
-
     const total = taskList.length;
     const done = counts.done;
     const percent = total === 0 ? 0 : Math.round((done / total) * 100);
-
     const fill = document.getElementById('prog-fill');
     const val = document.getElementById('prog-val');
     if (fill) fill.style.width = percent + '%';
     if (val) val.innerText = percent + '%';
 }
 
+// PWA Install Logic
 const installBtn = document.getElementById('installPwaBtn');
 let deferredPrompt;
-
 window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e;
     installBtn.style.display = 'block';
 });
-
 installBtn.addEventListener('click', async () => {
     if (deferredPrompt) {
         deferredPrompt.prompt();
-
         const { outcome } = await deferredPrompt.userChoice;
-        console.log(`Usuário escolheu: ${outcome}`);
-
         deferredPrompt = null;
-
-        if (outcome === 'accepted') {
-            installBtn.style.display = 'none';
-        }
+        if (outcome === 'accepted') installBtn.style.display = 'none';
     }
 });
-
 window.addEventListener('appinstalled', () => {
-    console.log('App instalado com sucesso');
     installBtn.style.display = 'none';
 });

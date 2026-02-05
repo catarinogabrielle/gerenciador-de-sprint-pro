@@ -29,6 +29,7 @@
   --done-text: #e6edf3;
 }
 
+/* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -158,6 +159,22 @@ header {
   left: 0;
 }
 
+.pomodoro-box {
+  background: var(--bg-column);
+  padding: 15px;
+  border-radius: 12px;
+  text-align: center;
+  border: 1px solid var(--border);
+}
+
+.timer-display {
+  font-size: 2rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  margin: 5px 0;
+  color: var(--accent);
+}
+
 .overlay {
   position: fixed;
   inset: 0;
@@ -233,6 +250,21 @@ header {
   flex: 1;
 }
 
+.modal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 25px;
+  padding-top: 15px;
+  border-top: 1px solid var(--border);
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+}
+
 .input-main,
 select,
 input[type="date"],
@@ -254,6 +286,53 @@ select:focus,
 input[type="date"]:focus,
 textarea:focus {
   border-color: var(--accent);
+}
+
+.subtask-list {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.subtask-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  padding: 6px;
+  border-radius: 6px;
+  background: var(--bg-column);
+}
+
+.subtask-item input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+}
+
+.subtask-item button {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+}
+
+.progress-container {
+  height: 4px;
+  background: var(--bg-column);
+  border-radius: 2px;
+  margin-top: 8px;
+  overflow: hidden;
+  display: none;
+}
+
+.progress-bar-card {
+  height: 100%;
+  background: var(--accent);
+  width: 0%;
+  transition: width 0.3s;
 }
 
 input[type="date"]::-webkit-calendar-picker-indicator {
@@ -314,6 +393,7 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
   font-size: 0.85rem;
   transition: all 0.2s;
 }
+
 .btn-delete-modal:hover {
   background: #ef4444;
   color: white;
@@ -424,11 +504,10 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
   cursor: pointer;
 }
 
-.card.dragging {
-  opacity: 0.5;
-  border: 2px dashed var(--accent) !important;
+.sortable-ghost {
+  opacity: 0.4;
   background: var(--bg-column);
-  cursor: grabbing;
+  border: 2px dashed var(--accent);
 }
 
 .card.finalizado {
@@ -539,9 +618,4 @@ footer {
   background: var(--done-border);
   width: 0%;
   transition: 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.column.drag-over {
-  background: rgba(255, 105, 0, 0.1);
-  outline: 2px dashed var(--accent);
 }
