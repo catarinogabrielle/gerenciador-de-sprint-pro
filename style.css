@@ -77,6 +77,7 @@ header {
 
 .filter-select {
   padding: 6px 12px;
+  width: max-content;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--bg-body);

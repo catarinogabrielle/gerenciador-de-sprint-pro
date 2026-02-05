@@ -7,6 +7,10 @@
     <title>Gerenciador de Sprint Pro</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#010409">
+    <link rel="apple-touch-icon" href="ssets/icon.png">
+    <link rel="icon" type="image/x-icon" href="assets/icon.ico">
 </head>
 
 <body>
@@ -147,6 +151,14 @@
     </footer>
 
     <script src="script.js"></script>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js')
+                .then(() => console.log('PWA Service Worker registrado com sucesso!'))
+                .catch((error) => console.log('Falha ao registrar PWA:', error));
+        }
+    </script>
 </body>
 
 </html>
