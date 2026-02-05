@@ -80,8 +80,7 @@
 
     <header>
         <div style="display: flex; align-items: center; gap: 15px;">
-            <button class="menu-btn" style="background:none; border:none; cursor:pointer; font-size: 1.2rem;"
-                onclick="toggleMenu()">☰</button>
+            <button class="menu-btn" onclick="toggleMenu()">☰</button>
             <span class="editable-title" id="boardTitle" contenteditable="true" onblur="saveTitle()">Sprint
                 Semanal</span>
         </div>
@@ -110,7 +109,7 @@
         <div class="column dropzone" id="todo">
             <div class="column-header">
                 <div class="header-title-group">
-                    <span>Backlog</span>
+                    <span>Pendências</span>
                     <button class="btn-add-rounded" onclick="openModal()" title="Adicionar Tarefa">+</button>
                 </div>
                 <span id="count-todo" class="count-badge">0</span>
