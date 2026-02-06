@@ -18,77 +18,111 @@
 
     <div class="modal-overlay" id="modalOverlay">
         <div class="modal-box">
-            <h3 id="modalTitle" style="margin-top:0; margin-bottom: 20px;">Nova Tarefa</h3>
-            <div class="form-group">
-                <label>Título da Tarefa</label>
-                <div style="display: flex; gap: 8px;">
-                    <input type="text" id="modalTaskInput" class="input-main" placeholder="Ex: Criar tela de login..."
-                        autofocus>
-                    <button class="btn-mic" onclick="startVoice('modalTaskInput', this)"
-                        title="Ditar título">🎙️</button>
-                </div>
+
+            <div class="modal-header-fixed">
+                <h3 id="modalTitle" style="margin:0;">Nova Tarefa</h3>
             </div>
-            <div class="form-group">
-                <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 5px;">
-                    <label style="margin:0;">Descrição (Markdown Ativo ✨)</label>
-                    <div style="display: flex; gap: 10px; align-items: center;">
-                        <button class="btn-mic-small" onclick="startVoice('modalDescriptionInput', this)"
-                            title="Ditar descrição" id="descMicBtn">🎙️ Ditar</button>
-                        <div class="tab-buttons">
-                            <button type="button" class="tab-btn active" onclick="switchDescTab('write')"
-                                id="btnWrite">✏️ Escrever</button>
-                            <button type="button" class="tab-btn" onclick="switchDescTab('preview')" id="btnPreview">👁️
-                                Visualizar</button>
+
+            <div class="modal-content-scroll">
+
+                <div class="form-group">
+                    <label>Título da Tarefa</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="modalTaskInput" class="input-main"
+                            placeholder="Ex: Criar tela de login..." autofocus>
+                        <button class="btn-mic" onclick="startVoice('modalTaskInput', this)"
+                            title="Ditar título">🎙️</button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Capa (URL da Imagem)</label>
+                    <div class="cover-upload-area" id="coverUploadArea"
+                        onclick="document.getElementById('fileCoverInput').click()">
+                        <span id="coverPlaceholder">📁 Clique para enviar ou Cole (Ctrl+V) uma imagem</span>
+                        <img id="coverPreview" class="cover-preview" style="display: none;">
+                        <button id="removeCoverBtn" class="btn-remove-cover" onclick="removeCover(event)"
+                            style="display: none;">×</button>
+                    </div>
+                    <input type="file" id="fileCoverInput" accept="image/*" style="display: none;"
+                        onchange="handleFileSelect(this)">
+                    <input type="hidden" id="modalCoverInput">
+                </div>
+
+                <div class="form-group">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 5px;">
+                        <label style="margin:0;">Descrição</label>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <button class="btn-mic-small" onclick="startVoice('modalDescriptionInput', this)"
+                                title="Ditar descrição" id="descMicBtn">🎙️ Ditar</button>
+                            <div class="tab-buttons">
+                                <button type="button" class="tab-btn active" onclick="switchDescTab('write')"
+                                    id="btnWrite">✏️ Escrever</button>
+                                <button type="button" class="tab-btn" onclick="switchDescTab('preview')"
+                                    id="btnPreview">👁️ Visualizar</button>
+                            </div>
                         </div>
                     </div>
+                    <textarea id="modalDescriptionInput" class="input-main" rows="4"
+                        placeholder="Detalhes da tarefa..."></textarea>
+                    <div id="descPreview" class="markdown-preview" style="display: none;"></div>
                 </div>
-                <textarea id="modalDescriptionInput" class="input-main" rows="5"
-                    placeholder="Use **negrito**, - listas ou cole links http://..."></textarea>
-                <div id="descPreview" class="markdown-preview" style="display: none;"></div>
-            </div>
-            <div class="form-group">
-                <label>Subtarefas</label>
-                <div style="display: flex; gap: 8px;">
-                    <input type="text" id="subtaskInput" class="input-main" placeholder="Adicionar item..."
-                        onkeypress="handleSubtaskEnter(event)">
-                    <button class="btn-secondary" onclick="addSubtask()">+</button>
-                </div>
-                <div id="subtaskList" class="subtask-list"></div>
-            </div>
-            <div class="form-row">
+
                 <div class="form-group">
-                    <label>Tag</label>
-                    <div style="display: flex; gap: 5px;">
-                        <select id="modalTagInput" style="flex:1;"></select>
-                        <button class="btn-secondary" onclick="addNewTag()" title="Criar nova tag"
-                            style="padding: 10px;">+</button>
+                    <label>Checklist</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="subtaskInput" class="input-main" placeholder="Adicionar item..."
+                            onkeypress="handleSubtaskEnter(event)">
+                        <button class="btn-secondary" onclick="addSubtask()">+</button>
+                    </div>
+                    <div id="subtaskList" class="subtask-list"></div>
+                </div>
+
+                <div class="form-row" style="margin-bottom: 10px; margin-top: 20px;">
+                    <div class=" form-group">
+                        <label>Tag</label>
+                        <div style="display: flex; gap: 5px;">
+                            <select id="modalTagInput" style="flex:1;"></select>
+                            <button class="btn-secondary" onclick="addNewTag()" title="Criar nova tag"
+                                style="padding: 10px;">+</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Prioridade</label>
+                        <select id="modalPriorityInput">
+                            <option value="Alta">Alta</option>
+                            <option value="Média">Média</option>
+                            <option value="Baixa">Baixa</option>
+                        </select>
                     </div>
                 </div>
-                <div class="form-group">
-                    <label>Responsável</label>
-                    <select id="modalMemberInput">
-                        <option value="">👤 Ninguém</option>
-                    </select>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Início</label>
+                        <input type="date" id="modalDateStart">
+                    </div>
+                    <div class="form-group">
+                        <label>Entrega</label>
+                        <input type="date" id="modalDateEnd">
+                    </div>
                 </div>
+
+                <hr style="border: 0; border-top: 1px solid var(--border); margin: 20px 0;">
+
                 <div class="form-group">
-                    <label>Prioridade</label>
-                    <select id="modalPriorityInput">
-                        <option value="Alta">Alta</option>
-                        <option value="Média">Média</option>
-                        <option value="Baixa">Baixa</option>
-                    </select>
+                    <label>Atividade</label>
+                    <div id="commentsList" class="comments-list"></div>
+                    <div style="display:flex; gap:8px; margin-top:10px;">
+                        <input type="text" id="commentInput" class="input-main" placeholder="Escreva um comentário..."
+                            onkeypress="if(event.key==='Enter') addComment()">
+                        <button class="btn-secondary" onclick="addComment()">➤</button>
+                    </div>
                 </div>
+
             </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Data Início</label>
-                    <input type="date" id="modalDateStart">
-                </div>
-                <div class="form-group">
-                    <label>Data Final</label>
-                    <input type="date" id="modalDateEnd">
-                </div>
-            </div>
+
             <div class="modal-footer">
                 <button id="modalDeleteBtn" class="btn-delete-modal" onclick="deleteTaskFromModal()"
                     style="display: none;">🗑️ Excluir</button>
@@ -102,22 +136,25 @@
 
     <div class="modal-overlay" id="statsOverlay">
         <div class="modal-box" style="max-width: 700px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 20px;">
                 <h3 style="margin:0;">📊 Relatório</h3>
                 <button class="btn-secondary" onclick="closeStatsModal()">Fechar</button>
             </div>
-            <div class="charts-grid">
-                <div class="chart-container">
-                    <h4 class="chart-title">Tags</h4>
-                    <div style="height: 200px; display: flex; justify-content: center;"><canvas id="tagsChart"></canvas>
+            <div class="modal-content-scroll">
+                <div class="charts-grid">
+                    <div class="chart-container">
+                        <h4 class="chart-title">Tags</h4>
+                        <div style="height: 200px; display: flex; justify-content: center;"><canvas
+                                id="tagsChart"></canvas></div>
+                    </div>
+                    <div class="chart-container">
+                        <h4 class="chart-title">Status</h4>
+                        <div style="height: 200px;"><canvas id="statusChart"></canvas></div>
                     </div>
                 </div>
-                <div class="chart-container">
-                    <h4 class="chart-title">Status</h4>
-                    <div style="height: 200px;"><canvas id="statusChart"></canvas></div>
-                </div>
+                <div id="statsSummary" class="stats-summary">...</div>
             </div>
-            <div id="statsSummary" class="stats-summary">...</div>
         </div>
     </div>
 

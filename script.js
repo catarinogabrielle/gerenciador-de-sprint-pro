@@ -9,9 +9,8 @@ let tags = JSON.parse(localStorage.getItem('nexus_tags')) || [
     "🎨 Design"
 ];
 
-const members = ["Gabrielle", "Willian", "Visitante", "Admin"];
-
 let columns = JSON.parse(localStorage.getItem('nexus_columns'));
+
 if (!columns || columns.length === 0) {
     columns = [
         { id: 'todo', title: 'Pendências' },
@@ -30,6 +29,7 @@ let currentPriorityFilter = 'all';
 let searchTerm = '';
 let editingTaskId = null;
 let tempSubtasks = [];
+let tempComments = [];
 
 let timerInterval;
 let timerSeconds = 1500;
@@ -42,10 +42,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('boardTitle').innerText = boardTitle;
     applyBackground(currentBg);
 
+    document.addEventListener('paste', handlePaste);
     document.getElementById('overlay').addEventListener('click', toggleMenu);
 
     updateTagsDropdown();
-    updateMembersDropdown();
     render();
 
     if (Notification.permission !== "granted" && Notification.permission !== "denied") {
@@ -66,21 +66,96 @@ function toggleMenu() {
     }
 }
 
+function handleFileSelect(input) {
+    if (input.files && input.files[0]) {
+        const file = input.files[0];
+        const reader = new FileReader();
+
+        reader.onload = function (e) {
+            setCoverImage(e.target.result);
+        }
+
+        reader.readAsDataURL(file);
+    }
+}
+
+function handlePaste(e) {
+    const modal = document.getElementById('modalOverlay');
+
+    if (!modal.classList.contains('active')) return;
+
+    if (e.clipboardData && e.clipboardData.items) {
+        const items = e.clipboardData.items;
+
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image') !== -1) {
+                const blob = items[i].getAsFile();
+                const reader = new FileReader();
+
+                reader.onload = function (event) {
+                    setCoverImage(event.target.result);
+                };
+
+                reader.readAsDataURL(blob);
+                e.preventDefault();
+                return;
+            }
+        }
+    }
+}
+
+function setCoverImage(base64String) {
+    const preview = document.getElementById('coverPreview');
+    const placeholder = document.getElementById('coverPlaceholder');
+    const hiddenInput = document.getElementById('modalCoverInput');
+    const removeBtn = document.getElementById('removeCoverBtn');
+
+    preview.src = base64String;
+    preview.style.display = 'block';
+    placeholder.style.display = 'none';
+    removeBtn.style.display = 'block';
+
+    hiddenInput.value = base64String;
+}
+
+function removeCover(e) {
+    e.stopPropagation();
+
+    const preview = document.getElementById('coverPreview');
+    const placeholder = document.getElementById('coverPlaceholder');
+    const hiddenInput = document.getElementById('modalCoverInput');
+    const removeBtn = document.getElementById('removeCoverBtn');
+    const fileInput = document.getElementById('fileCoverInput');
+
+    preview.src = '';
+    preview.style.display = 'none';
+    placeholder.style.display = 'block';
+    removeBtn.style.display = 'none';
+
+    hiddenInput.value = '';
+    fileInput.value = '';
+}
+
 function addColumn() {
     const title = prompt("Nome da nova coluna:");
     if (title) {
         const id = 'col-' + Date.now();
-        columns.push({ id: id, title: title });
+        columns.push({
+            id: id,
+            title: title
+        });
         saveColumns();
     }
 }
 
 function deleteColumn(colId) {
     const tasksInCol = tasks.filter(t => t.status === colId);
+
     if (tasksInCol.length > 0) {
         alert("Esta coluna contém tarefas. Mova-as antes de excluir.");
         return;
     }
+
     if (confirm("Tem certeza que deseja excluir esta coluna?")) {
         columns = columns.filter(c => c.id !== colId);
         saveColumns();
@@ -114,8 +189,6 @@ function render() {
 
         return matchTag && matchPriority && (term === '' || titleMatch || descMatch);
     });
-
-    const todayString = getTodayString();
 
     columns.forEach(col => {
         const columnEl = document.createElement('div');
@@ -153,19 +226,21 @@ function render() {
             card.id = t.id;
             card.onclick = () => openModal(t.id);
 
+            let coverHtml = '';
+            if (t.cover) {
+                coverHtml = `<img src="${t.cover}" class="card-cover" alt="Capa">`;
+            }
+
             let dateHtml = '';
             if (t.startDate || t.endDate) {
-                const isOverdue = t.endDate && t.endDate < todayString && !isDoneCol;
+                const isOverdue = t.endDate && t.endDate < getTodayString() && !isDoneCol;
                 const dateClass = isOverdue ? 'date-display overdue' : 'date-display';
                 const icon = isOverdue ? '⚠️ ' : '📅 ';
                 dateHtml = `<div class="${dateClass}">${icon} ${formatDate(t.startDate)} ${t.endDate ? '- ' + formatDate(t.endDate) : ''}</div>`;
             }
 
             const descIcon = t.description && t.description.trim() !== '' ? '<span class="has-desc-icon">📄</span>' : '';
-
             const prioColor = t.priority === 'Alta' ? '#ef4444' : t.priority === 'Média' ? '#f59e0b' : '#6366f1';
-
-            const avatarHtml = t.member ? getAvatar(t.member) : '';
 
             let progressHtml = '';
             if (t.subtasks && t.subtasks.length > 0) {
@@ -183,6 +258,7 @@ function render() {
             }
 
             card.innerHTML = `
+                ${coverHtml}
                 <div class="tag-row"><div class="tag">${t.tag}</div>${dateHtml}${descIcon}</div>
                 <span class="card-text">${t.text}</span>
                 ${progressHtml}
@@ -191,7 +267,6 @@ function render() {
                         <div class="dot" style="background:${prioColor}"></div>
                         <span>${t.priority}</span>
                     </div>
-                    ${avatarHtml}
                 </div>
             `;
             container.appendChild(card);
@@ -199,13 +274,13 @@ function render() {
     });
 
     updateMetrics(filteredTasks);
-
     setupCardDragAndDrop();
     setupColumnDragAndDrop();
 }
 
 function setupCardDragAndDrop() {
     const containers = document.querySelectorAll('.tasks-container');
+
     containers.forEach(container => {
         new Sortable(container, {
             group: 'shared',
@@ -257,19 +332,23 @@ function setupCardDragAndDrop() {
 
 function setupColumnDragAndDrop() {
     const board = document.getElementById('boardMain');
+
     new Sortable(board, {
         animation: 150,
         handle: '.column-header',
         ghostClass: 'sortable-ghost-column',
         delay: 100,
         delayOnTouchOnly: true,
+
         onEnd: function (evt) {
             const newColumnOrder = [];
             const domColumns = document.querySelectorAll('.column');
+
             domColumns.forEach(colEl => {
                 const colData = columns.find(c => c.id === colEl.id);
                 if (colData) newColumnOrder.push(colData);
             });
+
             columns = newColumnOrder;
             localStorage.setItem('nexus_columns', JSON.stringify(columns));
         }
@@ -297,15 +376,20 @@ function openModal(taskId = null, initialStatus = null) {
         document.getElementById('modalDescriptionInput').value = task.description || '';
         document.getElementById('modalTagInput').value = task.tag;
         document.getElementById('modalPriorityInput').value = task.priority;
-        document.getElementById('modalMemberInput').value = task.member || '';
         document.getElementById('modalDateStart').value = task.startDate || '';
         document.getElementById('modalDateEnd').value = task.endDate || '';
 
+        if (task.cover) {
+            setCoverImage(task.cover);
+        }
+
         tempSubtasks = task.subtasks ? JSON.parse(JSON.stringify(task.subtasks)) : [];
+        tempComments = task.comments ? JSON.parse(JSON.stringify(task.comments)) : [];
+
         renderSubtasksList();
+        renderCommentsList();
 
         saveBtn.onclick = () => saveTaskBtnClick();
-
         switchDescTab('preview');
 
     } else {
@@ -315,13 +399,14 @@ function openModal(taskId = null, initialStatus = null) {
         deleteBtn.style.display = 'none';
 
         tempSubtasks = [];
+        tempComments = [];
         renderSubtasksList();
-        document.getElementById('modalDateStart').value = getTodayString();
+        renderCommentsList();
 
+        document.getElementById('modalDateStart').value = getTodayString();
         const defaultStatus = initialStatus || (columns.length > 0 ? columns[0].id : 'todo');
         saveBtn.onclick = () => saveTaskBtnClick(defaultStatus);
 
-        // Abre na aba de escrita
         switchDescTab('write');
         setTimeout(() => document.getElementById('modalTaskInput').focus(), 100);
     }
@@ -343,16 +428,23 @@ function clearModalFields() {
     document.getElementById('subtaskList').innerHTML = '';
     document.getElementById('modalTagInput').selectedIndex = 0;
     document.getElementById('modalPriorityInput').selectedIndex = 0;
-    document.getElementById('modalMemberInput').selectedIndex = 0;
+
+    document.getElementById('modalCoverInput').value = '';
+    document.getElementById('commentsList').innerHTML = '';
+    document.getElementById('commentInput').value = '';
+
+    removeCover({ stopPropagation: () => { } });
 }
 
 function saveTaskBtnClick(statusOverride = null) {
     const titleInput = document.getElementById('modalTaskInput');
+
     if (!titleInput.value.trim()) {
         alert("O título da tarefa é obrigatório.");
         titleInput.focus();
         return;
     }
+
     if (editingTaskId) {
         updateExistingTask(editingTaskId);
     } else {
@@ -368,10 +460,11 @@ function createNewTask(status) {
         description: document.getElementById('modalDescriptionInput').value,
         tag: document.getElementById('modalTagInput').value,
         priority: document.getElementById('modalPriorityInput').value,
-        member: document.getElementById('modalMemberInput').value,
+        cover: document.getElementById('modalCoverInput').value,
         startDate: document.getElementById('modalDateStart').value,
         endDate: document.getElementById('modalDateEnd').value,
         subtasks: tempSubtasks,
+        comments: tempComments,
         status: status
     };
     tasks.push(newTask);
@@ -380,21 +473,24 @@ function createNewTask(status) {
 
 function updateExistingTask(id) {
     const taskIndex = tasks.findIndex(t => t.id === id);
+
     if (taskIndex > -1) {
         tasks[taskIndex].text = document.getElementById('modalTaskInput').value;
         tasks[taskIndex].description = document.getElementById('modalDescriptionInput').value;
         tasks[taskIndex].tag = document.getElementById('modalTagInput').value;
         tasks[taskIndex].priority = document.getElementById('modalPriorityInput').value;
-        tasks[taskIndex].member = document.getElementById('modalMemberInput').value;
+        tasks[taskIndex].cover = document.getElementById('modalCoverInput').value;
         tasks[taskIndex].startDate = document.getElementById('modalDateStart').value;
         tasks[taskIndex].endDate = document.getElementById('modalDateEnd').value;
         tasks[taskIndex].subtasks = tempSubtasks;
+        tasks[taskIndex].comments = tempComments;
         saveAndClose();
     }
 }
 
 function deleteTaskFromModal() {
     if (!editingTaskId) return;
+
     if (confirm("Tem certeza absoluta que deseja excluir esta tarefa?")) {
         tasks = tasks.filter(t => t.id !== editingTaskId);
         save();
@@ -419,6 +515,7 @@ function handleSubtaskEnter(e) {
 function addSubtask() {
     const input = document.getElementById('subtaskInput');
     const text = input.value.trim();
+
     if (text) {
         tempSubtasks.push({ text: text, done: false });
         input.value = '';
@@ -445,6 +542,47 @@ function toggleSubtask(i) {
 function removeSubtask(i) {
     tempSubtasks.splice(i, 1);
     renderSubtasksList();
+}
+
+function addComment() {
+    const input = document.getElementById('commentInput');
+    const text = input.value.trim();
+    const currentMember = 'Usuário';
+
+    if (text) {
+        const now = new Date();
+        const timeString = now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        tempComments.push({
+            text: text,
+            author: currentMember,
+            date: timeString
+        });
+
+        input.value = '';
+        renderCommentsList();
+    }
+}
+
+function renderCommentsList() {
+    const container = document.getElementById('commentsList');
+
+    if (tempComments.length === 0) {
+        container.innerHTML = '<div style="color:var(--text-sub); font-size:0.8rem; text-align:center;">Nenhum comentário.</div>';
+        return;
+    }
+
+    container.innerHTML = tempComments.map((c) => `
+        <div class="comment-item">
+            <div class="comment-header">
+                <span>${c.author}</span>
+                <span style="font-weight:400; opacity:0.7;">${c.date}</span>
+            </div>
+            <div class="comment-text">${c.text}</div>
+        </div>
+    `).join('');
+
+    container.scrollTop = container.scrollHeight;
 }
 
 function switchDescTab(mode) {
@@ -482,6 +620,7 @@ function simpleMarkdown(text) {
     let lines = html.split('\n');
     let inList = false;
     let newLines = [];
+
     lines.forEach(line => {
         let t = line.trim();
         if (t.startsWith('- ')) {
@@ -493,17 +632,19 @@ function simpleMarkdown(text) {
             else newLines.push(`<div>${line}</div>`);
         }
     });
-    if (inList) newLines.push('</ul>');
 
+    if (inList) newLines.push('</ul>');
     return newLines.join('').replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank">$1</a>');
 }
 
 function startVoice(targetId, btnElement) {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
     if (!SpeechRecognition) {
-        alert("Seu navegador não suporta reconhecimento de voz.");
+        alert("Navegador sem suporte a voz.");
         return;
     }
+
     const recognition = new SpeechRecognition();
     recognition.lang = 'pt-BR';
     recognition.maxAlternatives = 1;
@@ -511,6 +652,7 @@ function startVoice(targetId, btnElement) {
 
     btnElement.classList.add('recording');
     const originalText = btnElement.innerText;
+
     if (btnElement.classList.contains('btn-mic-small')) btnElement.innerText = "👂...";
 
     recognition.onresult = (evt) => {
@@ -532,21 +674,22 @@ function startVoice(targetId, btnElement) {
     };
 }
 
-function setBg(type) {
-    currentBg = type;
-    localStorage.setItem('nexus_bg', type);
-    applyBackground(type);
+function setBg(t) {
+    currentBg = t;
+    localStorage.setItem('nexus_bg', t);
+    applyBackground(t);
 }
 
-function applyBackground(type) {
-    const root = document.documentElement;
+function applyBackground(t) {
+    const r = document.documentElement;
     const base = theme === 'dark' ? '#010409' : '#f8fafc';
-    root.style.setProperty('--bg-body', base);
-    root.style.setProperty('--bg-image', 'none');
 
-    if (type === 'gradient-dark') root.style.setProperty('--bg-image', 'linear-gradient(135deg, #1e1e24, #0b0c10)');
-    else if (type === 'gradient-purple') root.style.setProperty('--bg-image', 'linear-gradient(135deg, #2b5876, #4e4376)');
-    else if (type === 'space') root.style.setProperty('--bg-image', "url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1280&auto=format&fit=crop')");
+    r.style.setProperty('--bg-body', base);
+    r.style.setProperty('--bg-image', 'none');
+
+    if (t === 'gradient-dark') r.style.setProperty('--bg-image', 'linear-gradient(135deg, #1e1e24, #0b0c10)');
+    else if (t === 'gradient-purple') r.style.setProperty('--bg-image', 'linear-gradient(135deg, #2b5876, #4e4376)');
+    else if (t === 'space') r.style.setProperty('--bg-image', "url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1280&auto=format&fit=crop')");
 }
 
 function toggleTheme() {
@@ -555,6 +698,44 @@ function toggleTheme() {
     localStorage.setItem('nexus_theme', theme);
     applyBackground(currentBg);
     if (document.getElementById('statsOverlay').classList.contains('active')) renderCharts();
+}
+
+function requestNotificationPermission() {
+    if (Notification.permission !== "granted") Notification.requestPermission();
+}
+
+function triggerNotification(t, b) {
+    document.getElementById('alertSound').play().catch(e => console.log(e));
+    if (Notification.permission === "granted") new Notification(t, { body: b, icon: 'assets/icon.png' });
+}
+
+function startTimer() {
+    requestNotificationPermission();
+    if (isTimerRunning) return;
+
+    isTimerRunning = true;
+    timerInterval = setInterval(() => {
+        timerSeconds--;
+        const m = Math.floor(timerSeconds / 60);
+        const s = timerSeconds % 60;
+        document.getElementById('pomodoroTimer').innerText = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+
+        if (timerSeconds <= 0) {
+            clearInterval(timerInterval);
+            isTimerRunning = false;
+            triggerNotification("Pomodoro!", "Tempo esgotado.");
+            alert("Pomodoro!");
+            timerSeconds = 1500;
+            document.getElementById('pomodoroTimer').innerText = "25:00";
+        }
+    }, 1000);
+}
+
+function resetTimer() {
+    clearInterval(timerInterval);
+    isTimerRunning = false;
+    timerSeconds = 1500;
+    document.getElementById('pomodoroTimer').innerText = "25:00";
 }
 
 function saveTitle() {
@@ -573,16 +754,63 @@ function updateTagsDropdown() {
     const m = document.getElementById('modalTagInput');
     const f = document.getElementById('filterTag');
     m.innerHTML = tags.map(t => `<option value="${t}">${t}</option>`).join('');
-    f.innerHTML = `<option value="all">🏷️ Todas as Tags</option>` + tags.map(t => `<option value="${t}">${t}</option>`).join('');
+    f.innerHTML = `<option value="all">🏷️ Tags</option>` + tags.map(t => `<option value="${t}">${t}</option>`).join('');
     f.value = currentTagFilter;
 }
 
 function addNewTag() {
-    const t = prompt("Nome da nova tag:");
+    const t = prompt("Tag:");
     if (t && !tags.includes(t)) {
         tags.push(t);
         localStorage.setItem('nexus_tags', JSON.stringify(tags));
         updateTagsDropdown();
+    }
+}
+
+function getTodayString() {
+    const d = new Date();
+    return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+}
+
+function formatDate(s) {
+    if (!s) return '';
+    const d = new Date(s);
+    return new Date(d.getTime() + (d.getTimezoneOffset() * 60000)).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+}
+
+function fireConfetti() {
+    const end = Date.now() + 1000;
+    (function frame() {
+        confetti({ particleCount: 2, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#ff6900', '#fff'] });
+        confetti({ particleCount: 2, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#ff6900', '#fff'] });
+        if (Date.now() < end) requestAnimationFrame(frame);
+    }());
+}
+
+function updateMetrics(tl) {
+    columns.forEach(c => {
+        const count = tl.filter(t => t.status === c.id).length;
+        const el = document.getElementById(`count-${c.id}`);
+        if (el) el.innerText = count;
+    });
+
+    const tot = tl.length;
+    const doneCol = columns.find(c => c.id === 'done' || c.title.toLowerCase().includes('conclu'));
+    const done = doneCol ? tl.filter(t => t.status === doneCol.id).length : 0;
+    const pct = tot === 0 ? 0 : Math.round((done / tot) * 100);
+
+    document.getElementById('prog-fill').style.width = pct + '%';
+    document.getElementById('prog-val').innerText = pct + '%';
+}
+
+function clearAllDone() {
+    const doneCol = columns.find(c => c.id === 'done' || c.title.toLowerCase().includes('conclu'));
+    if (doneCol && confirm("Limpar tarefas concluídas?")) {
+        tasks = tasks.filter(t => t.status !== doneCol.id);
+        save();
+        toggleMenu();
+    } else {
+        alert("Nenhuma coluna de conclusão encontrada.");
     }
 }
 
@@ -615,106 +843,6 @@ function importData(i) {
         }
     };
     r.readAsText(f);
-}
-
-function updateMetrics(tl) {
-    columns.forEach(c => {
-        const count = tl.filter(t => t.status === c.id).length;
-        const el = document.getElementById(`count-${c.id}`);
-        if (el) el.innerText = count;
-    });
-
-    const tot = tl.length;
-    const doneCol = columns.find(c => c.id === 'done' || c.title.toLowerCase().includes('conclu'));
-    const done = doneCol ? tl.filter(t => t.status === doneCol.id).length : 0;
-    const pct = tot === 0 ? 0 : Math.round((done / tot) * 100);
-
-    document.getElementById('prog-fill').style.width = pct + '%';
-    document.getElementById('prog-val').innerText = pct + '%';
-}
-
-function clearAllDone() {
-    const doneCol = columns.find(c => c.id === 'done' || c.title.toLowerCase().includes('conclu'));
-    if (doneCol && confirm("Limpar tarefas concluídas?")) {
-        tasks = tasks.filter(t => t.status !== doneCol.id);
-        save();
-        toggleMenu();
-    } else {
-        alert("Nenhuma coluna de conclusão encontrada.");
-    }
-}
-
-function requestNotificationPermission() {
-    if (Notification.permission !== "granted") Notification.requestPermission();
-}
-
-function triggerNotification(t, b) {
-    document.getElementById('alertSound').play().catch(e => console.log(e));
-    if (Notification.permission === "granted") new Notification(t, { body: b, icon: 'assets/icon.png' });
-}
-
-function startTimer() {
-    requestNotificationPermission();
-    if (isTimerRunning) return;
-    isTimerRunning = true;
-    timerInterval = setInterval(() => {
-        timerSeconds--;
-        const m = Math.floor(timerSeconds / 60);
-        const s = timerSeconds % 60;
-        document.getElementById('pomodoroTimer').innerText = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-
-        if (timerSeconds <= 0) {
-            clearInterval(timerInterval);
-            isTimerRunning = false;
-            triggerNotification("Pomodoro!", "Tempo esgotado.");
-            alert("Pomodoro!");
-            timerSeconds = 1500;
-            document.getElementById('pomodoroTimer').innerText = "25:00";
-        }
-    }, 1000);
-}
-
-function resetTimer() {
-    clearInterval(timerInterval);
-    isTimerRunning = false;
-    timerSeconds = 1500;
-    document.getElementById('pomodoroTimer').innerText = "25:00";
-}
-
-function getTodayString() {
-    const d = new Date();
-    return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
-}
-
-function formatDate(s) {
-    if (!s) return '';
-    const d = new Date(s);
-    return new Date(d.getTime() + (d.getTimezoneOffset() * 60000)).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-}
-
-function fireConfetti() {
-    const end = Date.now() + 1000;
-    (function frame() {
-        confetti({ particleCount: 2, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#ff6900', '#fff'] });
-        confetti({ particleCount: 2, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#ff6900', '#fff'] });
-        if (Date.now() < end) requestAnimationFrame(frame);
-    }());
-}
-
-function getAvatar(name) {
-    if (!name) return '';
-    const i = name.substring(0, 2).toUpperCase();
-    let h = 0;
-    for (let j = 0; j < name.length; j++) h = name.charCodeAt(j) + ((h << 5) - h);
-    const c = "#" + "00000".substring(0, 6 - (h & 0x00FFFFFF).toString(16).toUpperCase().length) + (h & 0x00FFFFFF).toString(16).toUpperCase();
-    return `<div class="avatar" style="background-color:${c}" title="${name}">${i}</div>`;
-}
-
-function updateMembersDropdown() {
-    const s = document.getElementById('modalMemberInput');
-    let h = `<option value="">👤 Ninguém</option>`;
-    members.forEach(m => h += `<option value="${m}">${m}</option>`);
-    s.innerHTML = h;
 }
 
 function openStatsModal() {
