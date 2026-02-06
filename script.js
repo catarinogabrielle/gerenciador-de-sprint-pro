@@ -1,11 +1,5 @@
-// ============================================================================
-// 1. DADOS INICIAIS E VARIÁVEIS GLOBAIS
-// ============================================================================
-
-// Carrega tarefas do LocalStorage ou inicia array vazio
 let tasks = JSON.parse(localStorage.getItem('nexus_tasks_v3')) || [];
 
-// Carrega tags ou usa padrões
 let tags = JSON.parse(localStorage.getItem('nexus_tags')) || [
     "💻 Desenvolvimento",
     "🐛 Bug Fix",
@@ -15,10 +9,8 @@ let tags = JSON.parse(localStorage.getItem('nexus_tags')) || [
     "🎨 Design"
 ];
 
-// Lista de Membros (Pode editar aqui)
 const members = ["Gabrielle", "Willian", "Visitante", "Admin"];
 
-// Carrega Colunas com Proteção contra Falhas (Se vazio, cria padrão)
 let columns = JSON.parse(localStorage.getItem('nexus_columns'));
 if (!columns || columns.length === 0) {
     columns = [
@@ -29,51 +21,38 @@ if (!columns || columns.length === 0) {
     localStorage.setItem('nexus_columns', JSON.stringify(columns));
 }
 
-// Configurações de UI
 let theme = localStorage.getItem('nexus_theme') || 'light';
 let currentBg = localStorage.getItem('nexus_bg') || 'default';
 let boardTitle = localStorage.getItem('nexus_title') || 'Sprint Semanal';
 
-// Filtros e Estado
 let currentTagFilter = 'all';
 let currentPriorityFilter = 'all';
 let searchTerm = '';
 let editingTaskId = null;
 let tempSubtasks = [];
 
-// Variáveis de Sistema (Timer, Charts)
 let timerInterval;
-let timerSeconds = 1500; // 25 min
+let timerSeconds = 1500;
 let isTimerRunning = false;
 let tagsChartInstance = null;
 let statusChartInstance = null;
 
-// ============================================================================
-// 2. INICIALIZAÇÃO
-// ============================================================================
 document.addEventListener('DOMContentLoaded', () => {
-    // Aplica configurações visuais
     document.body.setAttribute('data-theme', theme);
     document.getElementById('boardTitle').innerText = boardTitle;
     applyBackground(currentBg);
 
-    // Listeners Globais
     document.getElementById('overlay').addEventListener('click', toggleMenu);
 
-    // Inicializa Componentes
     updateTagsDropdown();
     updateMembersDropdown();
-    render(); // Renderiza o quadro inteiro
+    render();
 
-    // Pede permissão de notificação (sem travar o navegador)
     if (Notification.permission !== "granted" && Notification.permission !== "denied") {
         Notification.requestPermission();
     }
 });
 
-// ============================================================================
-// 3. MENU LATERAL
-// ============================================================================
 function toggleMenu() {
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('overlay');
@@ -87,9 +66,6 @@ function toggleMenu() {
     }
 }
 
-// ============================================================================
-// 4. GERENCIAMENTO DE COLUNAS (KANBAN DINÂMICO)
-// ============================================================================
 function addColumn() {
     const title = prompt("Nome da nova coluna:");
     if (title) {
@@ -100,7 +76,6 @@ function addColumn() {
 }
 
 function deleteColumn(colId) {
-    // Impede deletar se tiver tarefas dentro
     const tasksInCol = tasks.filter(t => t.status === colId);
     if (tasksInCol.length > 0) {
         alert("Esta coluna contém tarefas. Mova-as antes de excluir.");
@@ -116,7 +91,6 @@ function updateColumnTitle(colId, newTitle) {
     const col = columns.find(c => c.id === colId);
     if (col) {
         col.title = newTitle;
-        // Salva direto no Storage para não precisar re-renderizar (evita perder foco do input)
         localStorage.setItem('nexus_columns', JSON.stringify(columns));
     }
 }
@@ -126,14 +100,10 @@ function saveColumns() {
     render();
 }
 
-// ============================================================================
-// 5. RENDERIZAÇÃO DO BOARD (CORE)
-// ============================================================================
 function render() {
     const board = document.getElementById('boardMain');
-    board.innerHTML = ''; // Limpa o quadro para redesenhar
+    board.innerHTML = '';
 
-    // Filtra as tarefas com base na busca e selects
     const filteredTasks = tasks.filter(t => {
         const matchTag = currentTagFilter === 'all' || t.tag === currentTagFilter;
         const matchPriority = currentPriorityFilter === 'all' || t.priority === currentPriorityFilter;
@@ -147,7 +117,6 @@ function render() {
 
     const todayString = getTodayString();
 
-    // Loop: Cria as Colunas
     columns.forEach(col => {
         const columnEl = document.createElement('div');
         columnEl.className = 'column';
@@ -173,12 +142,10 @@ function render() {
 
         board.appendChild(columnEl);
 
-        // Loop: Cria os Cards dentro da Coluna
         const container = columnEl.querySelector('.tasks-container');
         const tasksForCol = filteredTasks.filter(t => t.status === col.id);
 
         tasksForCol.forEach(t => {
-            // Verifica se é coluna de conclusão (pelo ID ou Título) para pintar de verde
             const isDoneCol = col.id === 'done' || col.title.toLowerCase().includes('conclu');
 
             const card = document.createElement('div');
@@ -186,7 +153,6 @@ function render() {
             card.id = t.id;
             card.onclick = () => openModal(t.id);
 
-            // Datas e Lógica de Atraso
             let dateHtml = '';
             if (t.startDate || t.endDate) {
                 const isOverdue = t.endDate && t.endDate < todayString && !isDoneCol;
@@ -195,16 +161,12 @@ function render() {
                 dateHtml = `<div class="${dateClass}">${icon} ${formatDate(t.startDate)} ${t.endDate ? '- ' + formatDate(t.endDate) : ''}</div>`;
             }
 
-            // Ícone se tiver descrição
             const descIcon = t.description && t.description.trim() !== '' ? '<span class="has-desc-icon">📄</span>' : '';
 
-            // Cor da prioridade
             const prioColor = t.priority === 'Alta' ? '#ef4444' : t.priority === 'Média' ? '#f59e0b' : '#6366f1';
 
-            // Avatar do Membro
             const avatarHtml = t.member ? getAvatar(t.member) : '';
 
-            // Barra de Progresso (Checklist)
             let progressHtml = '';
             if (t.subtasks && t.subtasks.length > 0) {
                 const total = t.subtasks.length;
@@ -220,7 +182,6 @@ function render() {
                 `;
             }
 
-            // Monta o HTML do Card
             card.innerHTML = `
                 <div class="tag-row"><div class="tag">${t.tag}</div>${dateHtml}${descIcon}</div>
                 <span class="card-text">${t.text}</span>
@@ -239,16 +200,10 @@ function render() {
 
     updateMetrics(filteredTasks);
 
-    // Inicia os sistemas de arrastar (precisa ser chamado após criar o HTML)
     setupCardDragAndDrop();
     setupColumnDragAndDrop();
 }
 
-// ============================================================================
-// 6. DRAG & DROP (SORTABLE JS)
-// ============================================================================
-
-// Arrastar Cards (Reordenação Inteligente)
 function setupCardDragAndDrop() {
     const containers = document.querySelectorAll('.tasks-container');
     containers.forEach(container => {
@@ -265,7 +220,6 @@ function setupCardDragAndDrop() {
                 const task = tasks.find(t => t.id === itemEl.id);
 
                 if (task) {
-                    // Lógica de Confete e Data de Conclusão ao mover para coluna "Concluído"
                     const targetCol = columns.find(c => c.id === newStatus);
                     const isDoneTarget = targetCol && (targetCol.id === 'done' || targetCol.title.toLowerCase().includes('conclu'));
                     const wasDone = task.status === 'done' || (columns.find(c => c.id === task.status)?.title.toLowerCase().includes('conclu'));
@@ -280,13 +234,11 @@ function setupCardDragAndDrop() {
                     task.status = newStatus;
                 }
 
-                // REORDENAÇÃO GLOBAL: Salva a ordem visual dos cards
                 const allCards = document.querySelectorAll('.card');
                 const newOrderIds = Array.from(allCards).map(card => card.id);
                 const reorderedTasks = [];
                 const visibleTasksMap = new Map(tasks.map(t => [t.id, t]));
 
-                // Adiciona as tarefas visíveis na nova ordem
                 newOrderIds.forEach(id => {
                     if (visibleTasksMap.has(id)) {
                         reorderedTasks.push(visibleTasksMap.get(id));
@@ -294,7 +246,6 @@ function setupCardDragAndDrop() {
                     }
                 });
 
-                // Adiciona as tarefas ocultas (pelo filtro) no final para não perder
                 const hiddenTasks = Array.from(visibleTasksMap.values());
                 tasks = [...reorderedTasks, ...hiddenTasks];
 
@@ -304,17 +255,15 @@ function setupCardDragAndDrop() {
     });
 }
 
-// Arrastar Colunas
 function setupColumnDragAndDrop() {
     const board = document.getElementById('boardMain');
     new Sortable(board, {
         animation: 150,
-        handle: '.column-header', // Só arrasta pegando pelo título
+        handle: '.column-header',
         ghostClass: 'sortable-ghost-column',
         delay: 100,
         delayOnTouchOnly: true,
         onEnd: function (evt) {
-            // Atualiza ordem das colunas no array baseado no DOM
             const newColumnOrder = [];
             const domColumns = document.querySelectorAll('.column');
             domColumns.forEach(colEl => {
@@ -327,9 +276,6 @@ function setupColumnDragAndDrop() {
     });
 }
 
-// ============================================================================
-// 7. MODAL DE TAREFAS
-// ============================================================================
 function openModal(taskId = null, initialStatus = null) {
     const modal = document.getElementById('modalOverlay');
     const saveBtn = document.getElementById('modalSaveBtn');
@@ -339,7 +285,6 @@ function openModal(taskId = null, initialStatus = null) {
     clearModalFields();
 
     if (taskId) {
-        // --- MODO EDIÇÃO ---
         editingTaskId = taskId;
         const task = tasks.find(t => t.id === taskId);
         if (!task) return;
@@ -348,7 +293,6 @@ function openModal(taskId = null, initialStatus = null) {
         saveBtn.innerText = "Atualizar";
         deleteBtn.style.display = 'block';
 
-        // Preencher campos
         document.getElementById('modalTaskInput').value = task.text;
         document.getElementById('modalDescriptionInput').value = task.description || '';
         document.getElementById('modalTagInput').value = task.tag;
@@ -362,11 +306,9 @@ function openModal(taskId = null, initialStatus = null) {
 
         saveBtn.onclick = () => saveTaskBtnClick();
 
-        // Abre na aba de visualização para facilitar leitura
         switchDescTab('preview');
 
     } else {
-        // --- MODO CRIAÇÃO ---
         editingTaskId = null;
         modalTitle.innerText = "Nova Tarefa";
         saveBtn.innerText = "Salvar";
@@ -404,9 +346,6 @@ function clearModalFields() {
     document.getElementById('modalMemberInput').selectedIndex = 0;
 }
 
-// ============================================================================
-// 8. PERSISTÊNCIA DE DADOS (CRUD)
-// ============================================================================
 function saveTaskBtnClick(statusOverride = null) {
     const titleInput = document.getElementById('modalTaskInput');
     if (!titleInput.value.trim()) {
@@ -417,7 +356,6 @@ function saveTaskBtnClick(statusOverride = null) {
     if (editingTaskId) {
         updateExistingTask(editingTaskId);
     } else {
-        // Se statusOverride for null, usa a primeira coluna disponível
         const status = statusOverride || (columns.length > 0 ? columns[0].id : 'todo');
         createNewTask(status);
     }
@@ -474,9 +412,6 @@ function save() {
     render();
 }
 
-// ============================================================================
-// 9. SUBTAREFAS & CHECKLIST
-// ============================================================================
 function handleSubtaskEnter(e) {
     if (e.key === 'Enter') addSubtask();
 }
@@ -512,9 +447,6 @@ function removeSubtask(i) {
     renderSubtasksList();
 }
 
-// ============================================================================
-// 10. MARKDOWN, VOZ & VISUALIZAÇÃO
-// ============================================================================
 function switchDescTab(mode) {
     const btnWrite = document.getElementById('btnWrite');
     const btnPreview = document.getElementById('btnPreview');
@@ -600,11 +532,6 @@ function startVoice(targetId, btnElement) {
     };
 }
 
-// ============================================================================
-// 11. SISTEMAS AUXILIARES (WALLPAPER, STATS, BACKUP, POMODORO)
-// ============================================================================
-
-// Wallpaper
 function setBg(type) {
     currentBg = type;
     localStorage.setItem('nexus_bg', type);
@@ -630,13 +557,11 @@ function toggleTheme() {
     if (document.getElementById('statsOverlay').classList.contains('active')) renderCharts();
 }
 
-// Save Title
 function saveTitle() {
     boardTitle = document.getElementById('boardTitle').innerText;
     localStorage.setItem('nexus_title', boardTitle);
 }
 
-// Filters
 function applyFilters() {
     currentTagFilter = document.getElementById('filterTag').value;
     currentPriorityFilter = document.getElementById('filterPriority').value;
@@ -644,7 +569,6 @@ function applyFilters() {
     render();
 }
 
-// Tags Management
 function updateTagsDropdown() {
     const m = document.getElementById('modalTagInput');
     const f = document.getElementById('filterTag');
@@ -662,7 +586,6 @@ function addNewTag() {
     }
 }
 
-// Export/Import
 function exportData() {
     const d = JSON.stringify({ tasks, tags, columns, boardTitle });
     const u = 'data:application/json;charset=utf-8,' + encodeURIComponent(d);
@@ -694,7 +617,6 @@ function importData(i) {
     r.readAsText(f);
 }
 
-// Metrics
 function updateMetrics(tl) {
     columns.forEach(c => {
         const count = tl.filter(t => t.status === c.id).length;
@@ -722,7 +644,6 @@ function clearAllDone() {
     }
 }
 
-// Notifications & Pomodoro
 function requestNotificationPermission() {
     if (Notification.permission !== "granted") Notification.requestPermission();
 }
@@ -760,7 +681,6 @@ function resetTimer() {
     document.getElementById('pomodoroTimer').innerText = "25:00";
 }
 
-// Helpers Gerais
 function getTodayString() {
     const d = new Date();
     return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
@@ -797,7 +717,6 @@ function updateMembersDropdown() {
     s.innerHTML = h;
 }
 
-// Stats Modal Logic
 function openStatsModal() {
     document.getElementById('statsOverlay').classList.add('active');
     renderCharts();
