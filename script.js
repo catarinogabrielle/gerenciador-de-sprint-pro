@@ -9,7 +9,29 @@ let tags = JSON.parse(localStorage.getItem('nexus_tags')) || [
     "🎨 Design"
 ];
 
-let columns = JSON.parse(localStorage.getItem('nexus_columns'));
+let boards = JSON.parse(localStorage.getItem('nexus_boards_list')) || [];
+let currentBoardId = localStorage.getItem('nexus_active_board_id');
+
+if (boards.length === 0) {
+    const oldTasks = JSON.parse(localStorage.getItem('nexus_tasks_v3')) || [];
+    const oldColumns = JSON.parse(localStorage.getItem('nexus_columns')) || [];
+    const oldTitle = localStorage.getItem('nexus_title') || 'Sprint Principal';
+    const firstBoardId = 'board-' + Date.now();
+
+    boards.push({
+        id: firstBoardId,
+        title: oldTitle
+    });
+    localStorage.setItem('nexus_boards_list', JSON.stringify(boards));
+
+    localStorage.setItem(`nexus_tasks_${firstBoardId}`, JSON.stringify(oldTasks));
+    localStorage.setItem(`nexus_columns_${firstBoardId}`, JSON.stringify(oldColumns));
+
+    currentBoardId = firstBoardId;
+    localStorage.setItem('nexus_active_board_id', currentBoardId);
+}
+
+let columns = JSON.parse(localStorage.getItem(`nexus_columns_${currentBoardId}`)) || [];
 
 if (!columns || columns.length === 0) {
     columns = [
@@ -17,12 +39,13 @@ if (!columns || columns.length === 0) {
         { id: 'doing', title: 'Em Andamento' },
         { id: 'done', title: 'Concluído' }
     ];
-    localStorage.setItem('nexus_columns', JSON.stringify(columns));
 }
+
+tasks = JSON.parse(localStorage.getItem(`nexus_tasks_${currentBoardId}`)) || [];
 
 let theme = localStorage.getItem('nexus_theme') || 'light';
 let currentBg = localStorage.getItem('nexus_bg') || 'default';
-let boardTitle = localStorage.getItem('nexus_title') || 'Sprint Semanal';
+let boardTitle = boards.find(b => b.id === currentBoardId)?.title || 'Meu Quadro';
 
 let currentTagFilter = 'all';
 let currentPriorityFilter = 'all';
@@ -46,12 +69,100 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('overlay').addEventListener('click', toggleMenu);
 
     updateTagsDropdown();
+    renderBoardsList();
     render();
 
     if (Notification.permission !== "granted" && Notification.permission !== "denied") {
         Notification.requestPermission();
     }
 });
+
+function showSysModal(title, message, type = 'alert', placeholder = '') {
+    return new Promise((resolve) => {
+        const overlay = document.getElementById('sysOverlay');
+        const titleEl = document.getElementById('sysTitle');
+        const msgEl = document.getElementById('sysMessage');
+        const inputEl = document.getElementById('sysInput');
+        const btnConfirm = document.getElementById('sysBtnConfirm');
+        const btnCancel = document.getElementById('sysBtnCancel');
+
+        titleEl.innerText = title;
+        msgEl.innerText = message;
+        inputEl.value = '';
+
+        if (type === 'prompt') {
+            inputEl.style.display = 'block';
+        } else {
+            inputEl.style.display = 'none';
+        }
+
+        inputEl.placeholder = placeholder;
+
+        if (type === 'alert') {
+            btnCancel.style.display = 'none';
+        } else {
+            btnCancel.style.display = 'block';
+        }
+
+        btnConfirm.innerText = 'OK';
+
+        btnConfirm.className = 'btn-primary';
+        if (title.toLowerCase().includes('excluir') || title.toLowerCase().includes('limpar')) {
+            btnConfirm.style.background = '#ef4444';
+            btnConfirm.style.borderColor = '#ef4444';
+        } else {
+            btnConfirm.style.background = '';
+            btnConfirm.style.borderColor = '';
+        }
+
+        overlay.classList.add('active');
+
+        if (type === 'prompt') {
+            setTimeout(() => {
+                inputEl.focus();
+            }, 100);
+        }
+
+        const close = (value) => {
+            overlay.classList.remove('active');
+            resolve(value);
+        };
+
+        btnConfirm.onclick = () => {
+            if (type === 'prompt') {
+                close(inputEl.value);
+            } else {
+                close(true);
+            }
+        };
+
+        btnCancel.onclick = () => {
+            if (type === 'prompt') {
+                close(null);
+            } else {
+                close(false);
+            }
+        };
+
+        inputEl.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                btnConfirm.click();
+            }
+        };
+    });
+}
+
+async function showSysAlert(message) {
+    return await showSysModal('Aviso', message, 'alert');
+}
+
+async function showSysConfirm(message, title = 'Confirmação') {
+    return await showSysModal(title, message, 'confirm');
+}
+
+async function showSysPrompt(title, placeholder = '') {
+    return await showSysModal(title, '', 'prompt', placeholder);
+}
 
 function toggleMenu() {
     const sidebar = document.getElementById('sidebar');
@@ -64,6 +175,119 @@ function toggleMenu() {
         sidebar.classList.add('active');
         overlay.classList.add('active');
     }
+}
+
+function renderBoardsList() {
+    const list = document.getElementById('boardsList');
+
+    const htmlContent = boards.map(board => {
+        const activeClass = board.id === currentBoardId ? 'active' : '';
+        return `
+            <div class="board-item ${activeClass}" onclick="switchBoard('${board.id}')">
+                <span class="board-item-icon">📋</span>
+                <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                    ${board.title}
+                </span>
+            </div>
+        `;
+    }).join('');
+
+    list.innerHTML = htmlContent;
+}
+
+async function createNewBoard() {
+    const title = await showSysPrompt("Nome do novo quadro:");
+
+    if (!title) {
+        return;
+    }
+
+    const newId = 'board-' + Date.now();
+
+    boards.push({
+        id: newId,
+        title: title
+    });
+
+    localStorage.setItem('nexus_boards_list', JSON.stringify(boards));
+
+    const defaultCols = [
+        { id: 'todo', title: 'A Fazer' },
+        { id: 'doing', title: 'Fazendo' },
+        { id: 'done', title: 'Feito' }
+    ];
+
+    localStorage.setItem(`nexus_tasks_${newId}`, JSON.stringify([]));
+    localStorage.setItem(`nexus_columns_${newId}`, JSON.stringify(defaultCols));
+
+    switchBoard(newId);
+}
+
+function switchBoard(boardId) {
+    const currentBoard = boards.find(b => b.id === currentBoardId);
+
+    if (currentBoard) {
+        currentBoard.title = document.getElementById('boardTitle').innerText;
+        localStorage.setItem('nexus_boards_list', JSON.stringify(boards));
+    }
+
+    currentBoardId = boardId;
+    localStorage.setItem('nexus_active_board_id', currentBoardId);
+
+    tasks = JSON.parse(localStorage.getItem(`nexus_tasks_${currentBoardId}`)) || [];
+    columns = JSON.parse(localStorage.getItem(`nexus_columns_${currentBoardId}`)) || [];
+
+    const newBoard = boards.find(b => b.id === currentBoardId);
+    boardTitle = newBoard ? newBoard.title : 'Quadro';
+    document.getElementById('boardTitle').innerText = boardTitle;
+
+    render();
+    renderBoardsList();
+}
+
+async function deleteCurrentBoard() {
+    if (boards.length <= 1) {
+        await showSysAlert("Você não pode excluir o único quadro restante.");
+        return;
+    }
+
+    const confirmed = await showSysConfirm(
+        "Tem certeza? Isso apagará todas as tarefas deste quadro permanentemente.",
+        "Excluir Quadro"
+    );
+
+    if (confirmed) {
+        localStorage.removeItem(`nexus_tasks_${currentBoardId}`);
+        localStorage.removeItem(`nexus_columns_${currentBoardId}`);
+
+        boards = boards.filter(b => b.id !== currentBoardId);
+        localStorage.setItem('nexus_boards_list', JSON.stringify(boards));
+
+        switchBoard(boards[0].id);
+    }
+}
+
+function saveTitle() {
+    boardTitle = document.getElementById('boardTitle').innerText;
+    const boardIndex = boards.findIndex(b => b.id === currentBoardId);
+
+    if (boardIndex > -1) {
+        boards[boardIndex].title = boardTitle;
+        localStorage.setItem('nexus_boards_list', JSON.stringify(boards));
+    }
+
+    renderBoardsList();
+}
+
+function save() {
+    localStorage.setItem(`nexus_tasks_${currentBoardId}`, JSON.stringify(tasks));
+    localStorage.setItem(`nexus_columns_${currentBoardId}`, JSON.stringify(columns));
+    render();
+}
+
+function saveColumns() {
+    localStorage.setItem(`nexus_columns_${currentBoardId}`, JSON.stringify(columns));
+    render();
 }
 
 function handleFileSelect(input) {
@@ -82,7 +306,9 @@ function handleFileSelect(input) {
 function handlePaste(e) {
     const modal = document.getElementById('modalOverlay');
 
-    if (!modal.classList.contains('active')) return;
+    if (!modal.classList.contains('active')) {
+        return;
+    }
 
     if (e.clipboardData && e.clipboardData.items) {
         const items = e.clipboardData.items;
@@ -114,7 +340,6 @@ function setCoverImage(base64String) {
     preview.style.display = 'block';
     placeholder.style.display = 'none';
     removeBtn.style.display = 'block';
-
     hiddenInput.value = base64String;
 }
 
@@ -136,8 +361,9 @@ function removeCover(e) {
     fileInput.value = '';
 }
 
-function addColumn() {
-    const title = prompt("Nome da nova coluna:");
+async function addColumn() {
+    const title = await showSysPrompt("Nome da nova coluna:");
+
     if (title) {
         const id = 'col-' + Date.now();
         columns.push({
@@ -148,15 +374,17 @@ function addColumn() {
     }
 }
 
-function deleteColumn(colId) {
+async function deleteColumn(colId) {
     const tasksInCol = tasks.filter(t => t.status === colId);
 
     if (tasksInCol.length > 0) {
-        alert("Esta coluna contém tarefas. Mova-as antes de excluir.");
+        await showSysAlert("Esta coluna contém tarefas. Mova-as antes de excluir.");
         return;
     }
 
-    if (confirm("Tem certeza que deseja excluir esta coluna?")) {
+    const confirmed = await showSysConfirm("Tem certeza que deseja excluir esta coluna?", "Excluir Coluna");
+
+    if (confirmed) {
         columns = columns.filter(c => c.id !== colId);
         saveColumns();
     }
@@ -164,15 +392,11 @@ function deleteColumn(colId) {
 
 function updateColumnTitle(colId, newTitle) {
     const col = columns.find(c => c.id === colId);
+
     if (col) {
         col.title = newTitle;
-        localStorage.setItem('nexus_columns', JSON.stringify(columns));
+        saveColumns();
     }
-}
-
-function saveColumns() {
-    localStorage.setItem('nexus_columns', JSON.stringify(columns));
-    render();
 }
 
 function render() {
@@ -236,6 +460,7 @@ function render() {
                 const isOverdue = t.endDate && t.endDate < getTodayString() && !isDoneCol;
                 const dateClass = isOverdue ? 'date-display overdue' : 'date-display';
                 const icon = isOverdue ? '⚠️ ' : '📅 ';
+
                 dateHtml = `<div class="${dateClass}">${icon} ${formatDate(t.startDate)} ${t.endDate ? '- ' + formatDate(t.endDate) : ''}</div>`;
             }
 
@@ -247,6 +472,7 @@ function render() {
                 const total = t.subtasks.length;
                 const doneCount = t.subtasks.filter(s => s.done).length;
                 const pct = Math.round((doneCount / total) * 100);
+
                 progressHtml = `
                     <div style="font-size: 10px; color: var(--text-sub); margin-top: 5px; display: flex; justify-content: space-between;">
                         <span>Checklist</span> <span>${doneCount}/${total}</span>
@@ -259,7 +485,11 @@ function render() {
 
             card.innerHTML = `
                 ${coverHtml}
-                <div class="tag-row"><div class="tag">${t.tag}</div>${dateHtml}${descIcon}</div>
+                <div class="tag-row">
+                    <div class="tag">${t.tag}</div>
+                    ${dateHtml}
+                    ${descIcon}
+                </div>
                 <span class="card-text">${t.text}</span>
                 ${progressHtml}
                 <div class="card-footer">
@@ -269,6 +499,7 @@ function render() {
                     </div>
                 </div>
             `;
+
             container.appendChild(card);
         });
     });
@@ -346,11 +577,13 @@ function setupColumnDragAndDrop() {
 
             domColumns.forEach(colEl => {
                 const colData = columns.find(c => c.id === colEl.id);
-                if (colData) newColumnOrder.push(colData);
+                if (colData) {
+                    newColumnOrder.push(colData);
+                }
             });
 
             columns = newColumnOrder;
-            localStorage.setItem('nexus_columns', JSON.stringify(columns));
+            saveColumns();
         }
     });
 }
@@ -366,6 +599,7 @@ function openModal(taskId = null, initialStatus = null) {
     if (taskId) {
         editingTaskId = taskId;
         const task = tasks.find(t => t.id === taskId);
+
         if (!task) return;
 
         modalTitle.innerText = "Detalhes da Tarefa";
@@ -408,7 +642,9 @@ function openModal(taskId = null, initialStatus = null) {
         saveBtn.onclick = () => saveTaskBtnClick(defaultStatus);
 
         switchDescTab('write');
-        setTimeout(() => document.getElementById('modalTaskInput').focus(), 100);
+        setTimeout(() => {
+            document.getElementById('modalTaskInput').focus();
+        }, 100);
     }
 
     modal.classList.add('active');
@@ -436,11 +672,11 @@ function clearModalFields() {
     removeCover({ stopPropagation: () => { } });
 }
 
-function saveTaskBtnClick(statusOverride = null) {
+async function saveTaskBtnClick(statusOverride = null) {
     const titleInput = document.getElementById('modalTaskInput');
 
     if (!titleInput.value.trim()) {
-        alert("O título da tarefa é obrigatório.");
+        await showSysAlert("O título da tarefa é obrigatório.");
         titleInput.focus();
         return;
     }
@@ -467,6 +703,7 @@ function createNewTask(status) {
         comments: tempComments,
         status: status
     };
+
     tasks.push(newTask);
     saveAndClose();
 }
@@ -484,14 +721,19 @@ function updateExistingTask(id) {
         tasks[taskIndex].endDate = document.getElementById('modalDateEnd').value;
         tasks[taskIndex].subtasks = tempSubtasks;
         tasks[taskIndex].comments = tempComments;
+
         saveAndClose();
     }
 }
 
-function deleteTaskFromModal() {
-    if (!editingTaskId) return;
+async function deleteTaskFromModal() {
+    if (!editingTaskId) {
+        return;
+    }
 
-    if (confirm("Tem certeza absoluta que deseja excluir esta tarefa?")) {
+    const confirmed = await showSysConfirm("Tem certeza absoluta que deseja excluir esta tarefa?", "Excluir Tarefa");
+
+    if (confirmed) {
         tasks = tasks.filter(t => t.id !== editingTaskId);
         save();
         closeModal();
@@ -503,13 +745,10 @@ function saveAndClose() {
     closeModal();
 }
 
-function save() {
-    localStorage.setItem('nexus_tasks_v3', JSON.stringify(tasks));
-    render();
-}
-
 function handleSubtaskEnter(e) {
-    if (e.key === 'Enter') addSubtask();
+    if (e.key === 'Enter') {
+        addSubtask();
+    }
 }
 
 function addSubtask() {
@@ -525,6 +764,7 @@ function addSubtask() {
 
 function renderSubtasksList() {
     const container = document.getElementById('subtaskList');
+
     container.innerHTML = tempSubtasks.map((s, i) => `
         <div class="subtask-item">
             <input type="checkbox" ${s.done ? 'checked' : ''} onchange="toggleSubtask(${i})">
@@ -599,20 +839,28 @@ function switchDescTab(mode) {
         btnPreview.classList.remove('active');
         input.style.display = 'block';
         preview.style.display = 'none';
-        if (micBtn) micBtn.style.display = 'flex';
+
+        if (micBtn) {
+            micBtn.style.display = 'flex';
+        }
         input.focus();
     } else {
         btnWrite.classList.remove('active');
         btnPreview.classList.add('active');
         input.style.display = 'none';
         preview.style.display = 'block';
-        if (micBtn) micBtn.style.display = 'none';
+
+        if (micBtn) {
+            micBtn.style.display = 'none';
+        }
         preview.innerHTML = simpleMarkdown(input.value);
     }
 }
 
 function simpleMarkdown(text) {
-    if (!text || text.trim() === '') return '<div style="color:var(--text-sub); text-align:center; padding:10px;"><em>Nenhuma descrição inserida.</em></div>';
+    if (!text || text.trim() === '') {
+        return '<div style="color:var(--text-sub); text-align:center; padding:10px;"><em>Nenhuma descrição inserida.</em></div>';
+    }
 
     let html = text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
     html = html.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\*(.*?)\*/g, '<i>$1</i>');
@@ -624,12 +872,21 @@ function simpleMarkdown(text) {
     lines.forEach(line => {
         let t = line.trim();
         if (t.startsWith('- ')) {
-            if (!inList) { newLines.push('<ul>'); inList = true; }
+            if (!inList) {
+                newLines.push('<ul>');
+                inList = true;
+            }
             newLines.push(`<li>${t.substring(2)}</li>`);
         } else {
-            if (inList) { newLines.push('</ul>'); inList = false; }
-            if (t === '') newLines.push('<br>');
-            else newLines.push(`<div>${line}</div>`);
+            if (inList) {
+                newLines.push('</ul>');
+                inList = false;
+            }
+            if (t === '') {
+                newLines.push('<br>');
+            } else {
+                newLines.push(`<div>${line}</div>`);
+            }
         }
     });
 
@@ -637,11 +894,11 @@ function simpleMarkdown(text) {
     return newLines.join('').replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank">$1</a>');
 }
 
-function startVoice(targetId, btnElement) {
+async function startVoice(targetId, btnElement) {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-        alert("Navegador sem suporte a voz.");
+        await showSysAlert("Seu navegador não suporta reconhecimento de voz.");
         return;
     }
 
@@ -653,7 +910,9 @@ function startVoice(targetId, btnElement) {
     btnElement.classList.add('recording');
     const originalText = btnElement.innerText;
 
-    if (btnElement.classList.contains('btn-mic-small')) btnElement.innerText = "👂...";
+    if (btnElement.classList.contains('btn-mic-small')) {
+        btnElement.innerText = "👂...";
+    }
 
     recognition.onresult = (evt) => {
         const t = evt.results[0][0].transcript;
@@ -665,12 +924,16 @@ function startVoice(targetId, btnElement) {
     recognition.onspeechend = () => {
         recognition.stop();
         btnElement.classList.remove('recording');
-        if (btnElement.classList.contains('btn-mic-small')) btnElement.innerText = originalText;
+        if (btnElement.classList.contains('btn-mic-small')) {
+            btnElement.innerText = originalText;
+        }
     };
 
     recognition.onerror = () => {
         btnElement.classList.remove('recording');
-        if (btnElement.classList.contains('btn-mic-small')) btnElement.innerText = originalText;
+        if (btnElement.classList.contains('btn-mic-small')) {
+            btnElement.innerText = originalText;
+        }
     };
 }
 
@@ -687,9 +950,13 @@ function applyBackground(t) {
     r.style.setProperty('--bg-body', base);
     r.style.setProperty('--bg-image', 'none');
 
-    if (t === 'gradient-dark') r.style.setProperty('--bg-image', 'linear-gradient(135deg, #1e1e24, #0b0c10)');
-    else if (t === 'gradient-purple') r.style.setProperty('--bg-image', 'linear-gradient(135deg, #2b5876, #4e4376)');
-    else if (t === 'space') r.style.setProperty('--bg-image', "url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1280&auto=format&fit=crop')");
+    if (t === 'gradient-dark') {
+        r.style.setProperty('--bg-image', 'linear-gradient(135deg, #1e1e24, #0b0c10)');
+    } else if (t === 'gradient-purple') {
+        r.style.setProperty('--bg-image', 'linear-gradient(135deg, #2b5876, #4e4376)');
+    } else if (t === 'space') {
+        r.style.setProperty('--bg-image', "url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1280&auto=format&fit=crop')");
+    }
 }
 
 function toggleTheme() {
@@ -697,20 +964,28 @@ function toggleTheme() {
     document.body.setAttribute('data-theme', theme);
     localStorage.setItem('nexus_theme', theme);
     applyBackground(currentBg);
-    if (document.getElementById('statsOverlay').classList.contains('active')) renderCharts();
+
+    if (document.getElementById('statsOverlay').classList.contains('active')) {
+        renderCharts();
+    }
 }
 
 function requestNotificationPermission() {
-    if (Notification.permission !== "granted") Notification.requestPermission();
+    if (Notification.permission !== "granted") {
+        Notification.requestPermission();
+    }
 }
 
 function triggerNotification(t, b) {
     document.getElementById('alertSound').play().catch(e => console.log(e));
-    if (Notification.permission === "granted") new Notification(t, { body: b, icon: 'assets/icon.png' });
+    if (Notification.permission === "granted") {
+        new Notification(t, { body: b, icon: 'assets/icon.png' });
+    }
 }
 
 function startTimer() {
     requestNotificationPermission();
+
     if (isTimerRunning) return;
 
     isTimerRunning = true;
@@ -724,7 +999,7 @@ function startTimer() {
             clearInterval(timerInterval);
             isTimerRunning = false;
             triggerNotification("Pomodoro!", "Tempo esgotado.");
-            alert("Pomodoro!");
+            showSysAlert("Pomodoro: Tempo esgotado!");
             timerSeconds = 1500;
             document.getElementById('pomodoroTimer').innerText = "25:00";
         }
@@ -750,7 +1025,7 @@ function applyFilters() {
     render();
 }
 
-function updateTagsDropdown() {
+async function updateTagsDropdown() {
     const m = document.getElementById('modalTagInput');
     const f = document.getElementById('filterTag');
     m.innerHTML = tags.map(t => `<option value="${t}">${t}</option>`).join('');
@@ -758,33 +1033,14 @@ function updateTagsDropdown() {
     f.value = currentTagFilter;
 }
 
-function addNewTag() {
-    const t = prompt("Tag:");
+async function addNewTag() {
+    const t = await showSysPrompt("Tag:");
+
     if (t && !tags.includes(t)) {
         tags.push(t);
         localStorage.setItem('nexus_tags', JSON.stringify(tags));
         updateTagsDropdown();
     }
-}
-
-function getTodayString() {
-    const d = new Date();
-    return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
-}
-
-function formatDate(s) {
-    if (!s) return '';
-    const d = new Date(s);
-    return new Date(d.getTime() + (d.getTimezoneOffset() * 60000)).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-}
-
-function fireConfetti() {
-    const end = Date.now() + 1000;
-    (function frame() {
-        confetti({ particleCount: 2, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#ff6900', '#fff'] });
-        confetti({ particleCount: 2, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#ff6900', '#fff'] });
-        if (Date.now() < end) requestAnimationFrame(frame);
-    }());
 }
 
 function updateMetrics(tl) {
@@ -803,19 +1059,25 @@ function updateMetrics(tl) {
     document.getElementById('prog-val').innerText = pct + '%';
 }
 
-function clearAllDone() {
+async function clearAllDone() {
     const doneCol = columns.find(c => c.id === 'done' || c.title.toLowerCase().includes('conclu'));
-    if (doneCol && confirm("Limpar tarefas concluídas?")) {
+
+    if (doneCol && await showSysConfirm("Limpar tarefas concluídas?", "Limpar Tudo")) {
         tasks = tasks.filter(t => t.status !== doneCol.id);
         save();
         toggleMenu();
-    } else {
-        alert("Nenhuma coluna de conclusão encontrada.");
+    } else if (!doneCol) {
+        await showSysAlert("Nenhuma coluna de conclusão encontrada.");
     }
 }
 
 function exportData() {
-    const d = JSON.stringify({ tasks, tags, columns, boardTitle });
+    const d = JSON.stringify({
+        tasks,
+        tags,
+        columns,
+        boardTitle
+    });
     const u = 'data:application/json;charset=utf-8,' + encodeURIComponent(d);
     const a = document.createElement('a');
     a.href = u;
@@ -826,20 +1088,30 @@ function exportData() {
 function importData(i) {
     const f = i.files[0];
     if (!f) return;
+
     const r = new FileReader();
-    r.onload = function (e) {
+    r.onload = async function (e) {
         try {
             const d = JSON.parse(e.target.result);
             if (d.tasks) tasks = d.tasks;
-            if (d.tags) { tags = d.tags; localStorage.setItem('nexus_tags', JSON.stringify(tags)); }
-            if (d.columns) { columns = d.columns; localStorage.setItem('nexus_columns', JSON.stringify(columns)); }
-            if (d.boardTitle) { boardTitle = d.boardTitle; localStorage.setItem('nexus_title', boardTitle); }
+            if (d.tags) {
+                tags = d.tags;
+                localStorage.setItem('nexus_tags', JSON.stringify(tags));
+            }
+            if (d.columns) {
+                columns = d.columns;
+                localStorage.setItem('nexus_columns', JSON.stringify(columns));
+            }
+            if (d.boardTitle) {
+                boardTitle = d.boardTitle;
+                localStorage.setItem('nexus_title', boardTitle);
+            }
             document.getElementById('boardTitle').innerText = boardTitle;
             save();
             updateTagsDropdown();
-            alert("Backup restaurado!");
+            await showSysAlert("Backup restaurado!");
         } catch (err) {
-            alert("Erro ao importar.");
+            await showSysAlert("Erro ao importar.");
         }
     };
     r.readAsText(f);
@@ -855,19 +1127,26 @@ function closeStatsModal() {
 }
 
 document.getElementById('statsOverlay').addEventListener('click', (e) => {
-    if (e.target === document.getElementById('statsOverlay')) closeStatsModal();
+    if (e.target === document.getElementById('statsOverlay')) {
+        closeStatsModal();
+    }
 });
 
 function renderCharts() {
     const tagCounts = {};
     tags.forEach(t => tagCounts[t] = 0);
+
     tasks.forEach(t => {
-        if (tagCounts[t.tag] !== undefined) tagCounts[t.tag]++;
-        else tagCounts[t.tag] = 1;
+        if (tagCounts[t.tag] !== undefined) {
+            tagCounts[t.tag]++;
+        } else {
+            tagCounts[t.tag] = 1;
+        }
     });
 
     const labels = [];
     const dataStatus = [];
+
     columns.forEach(col => {
         const count = tasks.filter(t => t.status === col.id).length;
         labels.push(col.title);
@@ -879,35 +1158,61 @@ function renderCharts() {
 
     const ctxTags = document.getElementById('tagsChart').getContext('2d');
     if (tagsChartInstance) tagsChartInstance.destroy();
+
     tagsChartInstance = new Chart(ctxTags, {
         type: 'doughnut',
         data: {
             labels: Object.keys(tagCounts),
-            datasets: [{ data: Object.values(tagCounts), backgroundColor: chartColors, borderWidth: 0 }]
+            datasets: [{
+                data: Object.values(tagCounts),
+                backgroundColor: chartColors,
+                borderWidth: 0
+            }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { position: 'bottom', labels: { color: textColor, font: { size: 10 } } } }
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        color: textColor,
+                        font: { size: 10 }
+                    }
+                }
+            }
         }
     });
 
     const ctxStatus = document.getElementById('statusChart').getContext('2d');
     if (statusChartInstance) statusChartInstance.destroy();
+
     statusChartInstance = new Chart(ctxStatus, {
         type: 'bar',
         data: {
             labels: labels,
-            datasets: [{ label: 'Qtd', data: dataStatus, backgroundColor: '#3b82f6', borderRadius: 5 }]
+            datasets: [{
+                label: 'Qtd',
+                data: dataStatus,
+                backgroundColor: '#3b82f6',
+                borderRadius: 5
+            }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             scales: {
-                y: { beginAtZero: true, ticks: { color: textColor } },
-                x: { ticks: { color: textColor } }
+                y: {
+                    beginAtZero: true,
+                    ticks: { color: textColor }
+                },
+                x: {
+                    ticks: { color: textColor }
+                }
             },
-            plugins: { legend: { display: false } }
+            plugins: {
+                legend: { display: false }
+            }
         }
     });
 
@@ -915,5 +1220,43 @@ function renderCharts() {
     const doneCol = columns.find(c => c.id === 'done' || c.title.toLowerCase().includes('conclu'));
     const doneCount = doneCol ? tasks.filter(t => t.status === doneCol.id).length : 0;
     const pct = total === 0 ? 0 : Math.round((doneCount / total) * 100);
+
     document.getElementById('statsSummary').innerHTML = `<strong>Total:</strong> ${total} tarefas. <strong>Concluído:</strong> ${pct}%`;
+}
+
+function getTodayString() {
+    const d = new Date();
+    return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+}
+
+function formatDate(s) {
+    if (!s) return '';
+    const d = new Date(s);
+    return new Date(d.getTime() + (d.getTimezoneOffset() * 60000)).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+}
+
+function fireConfetti() {
+    const end = Date.now() + 1000;
+
+    (function frame() {
+        confetti({
+            particleCount: 2,
+            angle: 60,
+            spread: 55,
+            origin: { x: 0 },
+            colors: ['#ff6900', '#fff']
+        });
+
+        confetti({
+            particleCount: 2,
+            angle: 120,
+            spread: 55,
+            origin: { x: 1 },
+            colors: ['#ff6900', '#fff']
+        });
+
+        if (Date.now() < end) {
+            requestAnimationFrame(frame);
+        }
+    }());
 }
