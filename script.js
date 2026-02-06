@@ -1,8 +1,24 @@
+// ============================================================================
+// 1. DADOS INICIAIS E VARIÁVEIS GLOBAIS
+// ============================================================================
+
+// Carrega tarefas do LocalStorage ou inicia array vazio
 let tasks = JSON.parse(localStorage.getItem('nexus_tasks_v3')) || [];
+
+// Carrega tags ou usa padrões
 let tags = JSON.parse(localStorage.getItem('nexus_tags')) || [
-    "💻 Desenvolvimento", "🐛 Bug Fix", "🏋️ Treino", "📅 Reunião", "🚀 Deploy", "🎨 Design"
+    "💻 Desenvolvimento",
+    "🐛 Bug Fix",
+    "🏋️ Treino",
+    "📅 Reunião",
+    "🚀 Deploy",
+    "🎨 Design"
 ];
 
+// Lista de Membros (Pode editar aqui)
+const members = ["Gabrielle", "Willian", "Visitante", "Admin"];
+
+// Carrega Colunas com Proteção contra Falhas (Se vazio, cria padrão)
 let columns = JSON.parse(localStorage.getItem('nexus_columns'));
 if (!columns || columns.length === 0) {
     columns = [
@@ -13,37 +29,51 @@ if (!columns || columns.length === 0) {
     localStorage.setItem('nexus_columns', JSON.stringify(columns));
 }
 
+// Configurações de UI
 let theme = localStorage.getItem('nexus_theme') || 'light';
 let currentBg = localStorage.getItem('nexus_bg') || 'default';
 let boardTitle = localStorage.getItem('nexus_title') || 'Sprint Semanal';
 
+// Filtros e Estado
 let currentTagFilter = 'all';
 let currentPriorityFilter = 'all';
 let searchTerm = '';
 let editingTaskId = null;
 let tempSubtasks = [];
 
+// Variáveis de Sistema (Timer, Charts)
 let timerInterval;
-let timerSeconds = 1500;
+let timerSeconds = 1500; // 25 min
 let isTimerRunning = false;
 let tagsChartInstance = null;
 let statusChartInstance = null;
 
+// ============================================================================
+// 2. INICIALIZAÇÃO
+// ============================================================================
 document.addEventListener('DOMContentLoaded', () => {
+    // Aplica configurações visuais
     document.body.setAttribute('data-theme', theme);
     document.getElementById('boardTitle').innerText = boardTitle;
     applyBackground(currentBg);
 
+    // Listeners Globais
     document.getElementById('overlay').addEventListener('click', toggleMenu);
 
+    // Inicializa Componentes
     updateTagsDropdown();
-    render();
+    updateMembersDropdown();
+    render(); // Renderiza o quadro inteiro
 
+    // Pede permissão de notificação (sem travar o navegador)
     if (Notification.permission !== "granted" && Notification.permission !== "denied") {
         Notification.requestPermission();
     }
 });
 
+// ============================================================================
+// 3. MENU LATERAL
+// ============================================================================
 function toggleMenu() {
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('overlay');
@@ -57,6 +87,9 @@ function toggleMenu() {
     }
 }
 
+// ============================================================================
+// 4. GERENCIAMENTO DE COLUNAS (KANBAN DINÂMICO)
+// ============================================================================
 function addColumn() {
     const title = prompt("Nome da nova coluna:");
     if (title) {
@@ -67,6 +100,7 @@ function addColumn() {
 }
 
 function deleteColumn(colId) {
+    // Impede deletar se tiver tarefas dentro
     const tasksInCol = tasks.filter(t => t.status === colId);
     if (tasksInCol.length > 0) {
         alert("Esta coluna contém tarefas. Mova-as antes de excluir.");
@@ -82,6 +116,7 @@ function updateColumnTitle(colId, newTitle) {
     const col = columns.find(c => c.id === colId);
     if (col) {
         col.title = newTitle;
+        // Salva direto no Storage para não precisar re-renderizar (evita perder foco do input)
         localStorage.setItem('nexus_columns', JSON.stringify(columns));
     }
 }
@@ -91,10 +126,14 @@ function saveColumns() {
     render();
 }
 
+// ============================================================================
+// 5. RENDERIZAÇÃO DO BOARD (CORE)
+// ============================================================================
 function render() {
     const board = document.getElementById('boardMain');
-    board.innerHTML = '';
+    board.innerHTML = ''; // Limpa o quadro para redesenhar
 
+    // Filtra as tarefas com base na busca e selects
     const filteredTasks = tasks.filter(t => {
         const matchTag = currentTagFilter === 'all' || t.tag === currentTagFilter;
         const matchPriority = currentPriorityFilter === 'all' || t.priority === currentPriorityFilter;
@@ -108,6 +147,7 @@ function render() {
 
     const todayString = getTodayString();
 
+    // Loop: Cria as Colunas
     columns.forEach(col => {
         const columnEl = document.createElement('div');
         columnEl.className = 'column';
@@ -133,10 +173,12 @@ function render() {
 
         board.appendChild(columnEl);
 
+        // Loop: Cria os Cards dentro da Coluna
         const container = columnEl.querySelector('.tasks-container');
         const tasksForCol = filteredTasks.filter(t => t.status === col.id);
 
         tasksForCol.forEach(t => {
+            // Verifica se é coluna de conclusão (pelo ID ou Título) para pintar de verde
             const isDoneCol = col.id === 'done' || col.title.toLowerCase().includes('conclu');
 
             const card = document.createElement('div');
@@ -144,6 +186,7 @@ function render() {
             card.id = t.id;
             card.onclick = () => openModal(t.id);
 
+            // Datas e Lógica de Atraso
             let dateHtml = '';
             if (t.startDate || t.endDate) {
                 const isOverdue = t.endDate && t.endDate < todayString && !isDoneCol;
@@ -152,9 +195,16 @@ function render() {
                 dateHtml = `<div class="${dateClass}">${icon} ${formatDate(t.startDate)} ${t.endDate ? '- ' + formatDate(t.endDate) : ''}</div>`;
             }
 
+            // Ícone se tiver descrição
             const descIcon = t.description && t.description.trim() !== '' ? '<span class="has-desc-icon">📄</span>' : '';
+
+            // Cor da prioridade
             const prioColor = t.priority === 'Alta' ? '#ef4444' : t.priority === 'Média' ? '#f59e0b' : '#6366f1';
 
+            // Avatar do Membro
+            const avatarHtml = t.member ? getAvatar(t.member) : '';
+
+            // Barra de Progresso (Checklist)
             let progressHtml = '';
             if (t.subtasks && t.subtasks.length > 0) {
                 const total = t.subtasks.length;
@@ -170,6 +220,7 @@ function render() {
                 `;
             }
 
+            // Monta o HTML do Card
             card.innerHTML = `
                 <div class="tag-row"><div class="tag">${t.tag}</div>${dateHtml}${descIcon}</div>
                 <span class="card-text">${t.text}</span>
@@ -179,6 +230,7 @@ function render() {
                         <div class="dot" style="background:${prioColor}"></div>
                         <span>${t.priority}</span>
                     </div>
+                    ${avatarHtml}
                 </div>
             `;
             container.appendChild(card);
@@ -187,10 +239,16 @@ function render() {
 
     updateMetrics(filteredTasks);
 
+    // Inicia os sistemas de arrastar (precisa ser chamado após criar o HTML)
     setupCardDragAndDrop();
     setupColumnDragAndDrop();
 }
 
+// ============================================================================
+// 6. DRAG & DROP (SORTABLE JS)
+// ============================================================================
+
+// Arrastar Cards (Reordenação Inteligente)
 function setupCardDragAndDrop() {
     const containers = document.querySelectorAll('.tasks-container');
     containers.forEach(container => {
@@ -198,7 +256,8 @@ function setupCardDragAndDrop() {
             group: 'shared',
             animation: 150,
             ghostClass: 'sortable-ghost',
-            delay: 100, delayOnTouchOnly: true,
+            delay: 100,
+            delayOnTouchOnly: true,
 
             onEnd: function (evt) {
                 const itemEl = evt.item;
@@ -206,6 +265,7 @@ function setupCardDragAndDrop() {
                 const task = tasks.find(t => t.id === itemEl.id);
 
                 if (task) {
+                    // Lógica de Confete e Data de Conclusão ao mover para coluna "Concluído"
                     const targetCol = columns.find(c => c.id === newStatus);
                     const isDoneTarget = targetCol && (targetCol.id === 'done' || targetCol.title.toLowerCase().includes('conclu'));
                     const wasDone = task.status === 'done' || (columns.find(c => c.id === task.status)?.title.toLowerCase().includes('conclu'));
@@ -220,17 +280,21 @@ function setupCardDragAndDrop() {
                     task.status = newStatus;
                 }
 
+                // REORDENAÇÃO GLOBAL: Salva a ordem visual dos cards
                 const allCards = document.querySelectorAll('.card');
                 const newOrderIds = Array.from(allCards).map(card => card.id);
                 const reorderedTasks = [];
                 const visibleTasksMap = new Map(tasks.map(t => [t.id, t]));
 
+                // Adiciona as tarefas visíveis na nova ordem
                 newOrderIds.forEach(id => {
                     if (visibleTasksMap.has(id)) {
                         reorderedTasks.push(visibleTasksMap.get(id));
                         visibleTasksMap.delete(id);
                     }
                 });
+
+                // Adiciona as tarefas ocultas (pelo filtro) no final para não perder
                 const hiddenTasks = Array.from(visibleTasksMap.values());
                 tasks = [...reorderedTasks, ...hiddenTasks];
 
@@ -240,14 +304,17 @@ function setupCardDragAndDrop() {
     });
 }
 
+// Arrastar Colunas
 function setupColumnDragAndDrop() {
     const board = document.getElementById('boardMain');
     new Sortable(board, {
         animation: 150,
-        handle: '.column-header',
+        handle: '.column-header', // Só arrasta pegando pelo título
         ghostClass: 'sortable-ghost-column',
-        delay: 100, delayOnTouchOnly: true,
+        delay: 100,
+        delayOnTouchOnly: true,
         onEnd: function (evt) {
+            // Atualiza ordem das colunas no array baseado no DOM
             const newColumnOrder = [];
             const domColumns = document.querySelectorAll('.column');
             domColumns.forEach(colEl => {
@@ -260,6 +327,9 @@ function setupColumnDragAndDrop() {
     });
 }
 
+// ============================================================================
+// 7. MODAL DE TAREFAS
+// ============================================================================
 function openModal(taskId = null, initialStatus = null) {
     const modal = document.getElementById('modalOverlay');
     const saveBtn = document.getElementById('modalSaveBtn');
@@ -269,6 +339,7 @@ function openModal(taskId = null, initialStatus = null) {
     clearModalFields();
 
     if (taskId) {
+        // --- MODO EDIÇÃO ---
         editingTaskId = taskId;
         const task = tasks.find(t => t.id === taskId);
         if (!task) return;
@@ -277,10 +348,12 @@ function openModal(taskId = null, initialStatus = null) {
         saveBtn.innerText = "Atualizar";
         deleteBtn.style.display = 'block';
 
+        // Preencher campos
         document.getElementById('modalTaskInput').value = task.text;
         document.getElementById('modalDescriptionInput').value = task.description || '';
         document.getElementById('modalTagInput').value = task.tag;
         document.getElementById('modalPriorityInput').value = task.priority;
+        document.getElementById('modalMemberInput').value = task.member || '';
         document.getElementById('modalDateStart').value = task.startDate || '';
         document.getElementById('modalDateEnd').value = task.endDate || '';
 
@@ -289,9 +362,11 @@ function openModal(taskId = null, initialStatus = null) {
 
         saveBtn.onclick = () => saveTaskBtnClick();
 
+        // Abre na aba de visualização para facilitar leitura
         switchDescTab('preview');
 
     } else {
+        // --- MODO CRIAÇÃO ---
         editingTaskId = null;
         modalTitle.innerText = "Nova Tarefa";
         saveBtn.innerText = "Salvar";
@@ -304,6 +379,7 @@ function openModal(taskId = null, initialStatus = null) {
         const defaultStatus = initialStatus || (columns.length > 0 ? columns[0].id : 'todo');
         saveBtn.onclick = () => saveTaskBtnClick(defaultStatus);
 
+        // Abre na aba de escrita
         switchDescTab('write');
         setTimeout(() => document.getElementById('modalTaskInput').focus(), 100);
     }
@@ -325,8 +401,12 @@ function clearModalFields() {
     document.getElementById('subtaskList').innerHTML = '';
     document.getElementById('modalTagInput').selectedIndex = 0;
     document.getElementById('modalPriorityInput').selectedIndex = 0;
+    document.getElementById('modalMemberInput').selectedIndex = 0;
 }
 
+// ============================================================================
+// 8. PERSISTÊNCIA DE DADOS (CRUD)
+// ============================================================================
 function saveTaskBtnClick(statusOverride = null) {
     const titleInput = document.getElementById('modalTaskInput');
     if (!titleInput.value.trim()) {
@@ -334,8 +414,13 @@ function saveTaskBtnClick(statusOverride = null) {
         titleInput.focus();
         return;
     }
-    if (editingTaskId) updateExistingTask(editingTaskId);
-    else createNewTask(statusOverride || (columns.length > 0 ? columns[0].id : 'todo'));
+    if (editingTaskId) {
+        updateExistingTask(editingTaskId);
+    } else {
+        // Se statusOverride for null, usa a primeira coluna disponível
+        const status = statusOverride || (columns.length > 0 ? columns[0].id : 'todo');
+        createNewTask(status);
+    }
 }
 
 function createNewTask(status) {
@@ -345,6 +430,7 @@ function createNewTask(status) {
         description: document.getElementById('modalDescriptionInput').value,
         tag: document.getElementById('modalTagInput').value,
         priority: document.getElementById('modalPriorityInput').value,
+        member: document.getElementById('modalMemberInput').value,
         startDate: document.getElementById('modalDateStart').value,
         endDate: document.getElementById('modalDateEnd').value,
         subtasks: tempSubtasks,
@@ -361,6 +447,7 @@ function updateExistingTask(id) {
         tasks[taskIndex].description = document.getElementById('modalDescriptionInput').value;
         tasks[taskIndex].tag = document.getElementById('modalTagInput').value;
         tasks[taskIndex].priority = document.getElementById('modalPriorityInput').value;
+        tasks[taskIndex].member = document.getElementById('modalMemberInput').value;
         tasks[taskIndex].startDate = document.getElementById('modalDateStart').value;
         tasks[taskIndex].endDate = document.getElementById('modalDateEnd').value;
         tasks[taskIndex].subtasks = tempSubtasks;
@@ -377,42 +464,78 @@ function deleteTaskFromModal() {
     }
 }
 
-function saveAndClose() { save(); closeModal(); }
-function save() { localStorage.setItem('nexus_tasks_v3', JSON.stringify(tasks)); render(); }
+function saveAndClose() {
+    save();
+    closeModal();
+}
 
-function handleSubtaskEnter(e) { if (e.key === 'Enter') addSubtask(); }
+function save() {
+    localStorage.setItem('nexus_tasks_v3', JSON.stringify(tasks));
+    render();
+}
+
+// ============================================================================
+// 9. SUBTAREFAS & CHECKLIST
+// ============================================================================
+function handleSubtaskEnter(e) {
+    if (e.key === 'Enter') addSubtask();
+}
+
 function addSubtask() {
     const input = document.getElementById('subtaskInput');
     const text = input.value.trim();
-    if (text) { tempSubtasks.push({ text: text, done: false }); input.value = ''; renderSubtasksList(); }
+    if (text) {
+        tempSubtasks.push({ text: text, done: false });
+        input.value = '';
+        renderSubtasksList();
+    }
 }
+
 function renderSubtasksList() {
     const container = document.getElementById('subtaskList');
-    container.innerHTML = tempSubtasks.map((st, index) => `
+    container.innerHTML = tempSubtasks.map((s, i) => `
         <div class="subtask-item">
-            <input type="checkbox" ${st.done ? 'checked' : ''} onchange="toggleSubtask(${index})">
-            <span style="${st.done ? 'text-decoration: line-through; opacity: 0.6;' : ''}">${st.text}</span>
-            <button onclick="removeSubtask(${index})">×</button>
+            <input type="checkbox" ${s.done ? 'checked' : ''} onchange="toggleSubtask(${i})">
+            <span style="${s.done ? 'text-decoration: line-through; opacity: 0.6;' : ''}">${s.text}</span>
+            <button onclick="removeSubtask(${i})">×</button>
         </div>
     `).join('');
 }
-function toggleSubtask(index) { tempSubtasks[index].done = !tempSubtasks[index].done; renderSubtasksList(); }
-function removeSubtask(index) { tempSubtasks.splice(index, 1); renderSubtasksList(); }
 
+function toggleSubtask(i) {
+    tempSubtasks[i].done = !tempSubtasks[i].done;
+    renderSubtasksList();
+}
+
+function removeSubtask(i) {
+    tempSubtasks.splice(i, 1);
+    renderSubtasksList();
+}
+
+// ============================================================================
+// 10. MARKDOWN, VOZ & VISUALIZAÇÃO
+// ============================================================================
 function switchDescTab(mode) {
-    const btnWrite = document.getElementById('btnWrite'); const btnPreview = document.getElementById('btnPreview');
-    const input = document.getElementById('modalDescriptionInput'); const preview = document.getElementById('descPreview');
+    const btnWrite = document.getElementById('btnWrite');
+    const btnPreview = document.getElementById('btnPreview');
+    const input = document.getElementById('modalDescriptionInput');
+    const preview = document.getElementById('descPreview');
     const micBtn = document.getElementById('descMicBtn');
+
     if (!btnWrite || !btnPreview) return;
 
     if (mode === 'write') {
-        btnWrite.classList.add('active'); btnPreview.classList.remove('active');
-        input.style.display = 'block'; preview.style.display = 'none';
+        btnWrite.classList.add('active');
+        btnPreview.classList.remove('active');
+        input.style.display = 'block';
+        preview.style.display = 'none';
         if (micBtn) micBtn.style.display = 'flex';
         input.focus();
     } else {
-        btnWrite.classList.remove('active'); btnPreview.classList.add('active');
-        input.style.display = 'none'; preview.style.display = 'block';
+        btnWrite.classList.remove('active');
+        btnPreview.classList.add('active');
+        input.style.display = 'none';
+        preview.style.display = 'block';
         if (micBtn) micBtn.style.display = 'none';
         preview.innerHTML = simpleMarkdown(input.value);
     }
@@ -420,86 +543,224 @@ function switchDescTab(mode) {
 
 function simpleMarkdown(text) {
     if (!text || text.trim() === '') return '<div style="color:var(--text-sub); text-align:center; padding:10px;"><em>Nenhuma descrição inserida.</em></div>';
+
     let html = text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
     html = html.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\*(.*?)\*/g, '<i>$1</i>');
-    let lines = html.split('\n'); let inList = false; let newLines = [];
+
+    let lines = html.split('\n');
+    let inList = false;
+    let newLines = [];
     lines.forEach(line => {
         let t = line.trim();
-        if (t.startsWith('- ')) { if (!inList) { newLines.push('<ul>'); inList = true; } newLines.push(`<li>${t.substring(2)}</li>`); }
-        else { if (inList) { newLines.push('</ul>'); inList = false; } if (t === '') newLines.push('<br>'); else newLines.push(`<div>${line}</div>`); }
+        if (t.startsWith('- ')) {
+            if (!inList) { newLines.push('<ul>'); inList = true; }
+            newLines.push(`<li>${t.substring(2)}</li>`);
+        } else {
+            if (inList) { newLines.push('</ul>'); inList = false; }
+            if (t === '') newLines.push('<br>');
+            else newLines.push(`<div>${line}</div>`);
+        }
     });
     if (inList) newLines.push('</ul>');
+
     return newLines.join('').replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank">$1</a>');
 }
 
 function startVoice(targetId, btnElement) {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) { alert("Navegador sem suporte a voz."); return; }
+    if (!SpeechRecognition) {
+        alert("Seu navegador não suporta reconhecimento de voz.");
+        return;
+    }
     const recognition = new SpeechRecognition();
-    recognition.lang = 'pt-BR'; recognition.maxAlternatives = 1;
+    recognition.lang = 'pt-BR';
+    recognition.maxAlternatives = 1;
     recognition.start();
+
     btnElement.classList.add('recording');
     const originalText = btnElement.innerText;
     if (btnElement.classList.contains('btn-mic-small')) btnElement.innerText = "👂...";
+
     recognition.onresult = (evt) => {
         const t = evt.results[0][0].transcript;
         const input = document.getElementById(targetId);
         input.value = input.value.trim() ? input.value + " " + t : t;
         input.value = input.value.charAt(0).toUpperCase() + input.value.slice(1);
     };
-    recognition.onspeechend = () => { recognition.stop(); btnElement.classList.remove('recording'); if (btnElement.classList.contains('btn-mic-small')) btnElement.innerText = originalText; };
-    recognition.onerror = () => { btnElement.classList.remove('recording'); if (btnElement.classList.contains('btn-mic-small')) btnElement.innerText = originalText; };
+
+    recognition.onspeechend = () => {
+        recognition.stop();
+        btnElement.classList.remove('recording');
+        if (btnElement.classList.contains('btn-mic-small')) btnElement.innerText = originalText;
+    };
+
+    recognition.onerror = () => {
+        btnElement.classList.remove('recording');
+        if (btnElement.classList.contains('btn-mic-small')) btnElement.innerText = originalText;
+    };
 }
 
-function setBg(t) { currentBg = t; localStorage.setItem('nexus_bg', t); applyBackground(t); }
-function applyBackground(t) {
-    const r = document.documentElement; const base = theme === 'dark' ? '#010409' : '#f8fafc';
-    r.style.setProperty('--bg-body', base); r.style.setProperty('--bg-image', 'none');
-    if (t === 'gradient-dark') r.style.setProperty('--bg-image', 'linear-gradient(135deg, #1e1e24, #0b0c10)');
-    else if (t === 'gradient-purple') r.style.setProperty('--bg-image', 'linear-gradient(135deg, #2b5876, #4e4376)');
-    else if (t === 'space') r.style.setProperty('--bg-image', "url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1280&auto=format&fit=crop')");
+// ============================================================================
+// 11. SISTEMAS AUXILIARES (WALLPAPER, STATS, BACKUP, POMODORO)
+// ============================================================================
+
+// Wallpaper
+function setBg(type) {
+    currentBg = type;
+    localStorage.setItem('nexus_bg', type);
+    applyBackground(type);
 }
 
-function openStatsModal() { document.getElementById('statsOverlay').classList.add('active'); renderCharts(); }
-function closeStatsModal() { document.getElementById('statsOverlay').classList.remove('active'); }
-document.getElementById('statsOverlay').addEventListener('click', (e) => { if (e.target === document.getElementById('statsOverlay')) closeStatsModal(); });
+function applyBackground(type) {
+    const root = document.documentElement;
+    const base = theme === 'dark' ? '#010409' : '#f8fafc';
+    root.style.setProperty('--bg-body', base);
+    root.style.setProperty('--bg-image', 'none');
 
-function renderCharts() {
-    const tagCounts = {}; tags.forEach(t => tagCounts[t] = 0);
-    tasks.forEach(t => { if (tagCounts[t.tag] !== undefined) tagCounts[t.tag]++; else tagCounts[t.tag] = 1; });
-    const statusCounts = {}; const labels = []; const dataStatus = [];
-    columns.forEach(col => {
-        const count = tasks.filter(t => t.status === col.id).length;
-        labels.push(col.title);
-        dataStatus.push(count);
+    if (type === 'gradient-dark') root.style.setProperty('--bg-image', 'linear-gradient(135deg, #1e1e24, #0b0c10)');
+    else if (type === 'gradient-purple') root.style.setProperty('--bg-image', 'linear-gradient(135deg, #2b5876, #4e4376)');
+    else if (type === 'space') root.style.setProperty('--bg-image', "url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1280&auto=format&fit=crop')");
+}
+
+function toggleTheme() {
+    theme = theme === 'light' ? 'dark' : 'light';
+    document.body.setAttribute('data-theme', theme);
+    localStorage.setItem('nexus_theme', theme);
+    applyBackground(currentBg);
+    if (document.getElementById('statsOverlay').classList.contains('active')) renderCharts();
+}
+
+// Save Title
+function saveTitle() {
+    boardTitle = document.getElementById('boardTitle').innerText;
+    localStorage.setItem('nexus_title', boardTitle);
+}
+
+// Filters
+function applyFilters() {
+    currentTagFilter = document.getElementById('filterTag').value;
+    currentPriorityFilter = document.getElementById('filterPriority').value;
+    searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    render();
+}
+
+// Tags Management
+function updateTagsDropdown() {
+    const m = document.getElementById('modalTagInput');
+    const f = document.getElementById('filterTag');
+    m.innerHTML = tags.map(t => `<option value="${t}">${t}</option>`).join('');
+    f.innerHTML = `<option value="all">🏷️ Todas as Tags</option>` + tags.map(t => `<option value="${t}">${t}</option>`).join('');
+    f.value = currentTagFilter;
+}
+
+function addNewTag() {
+    const t = prompt("Nome da nova tag:");
+    if (t && !tags.includes(t)) {
+        tags.push(t);
+        localStorage.setItem('nexus_tags', JSON.stringify(tags));
+        updateTagsDropdown();
+    }
+}
+
+// Export/Import
+function exportData() {
+    const d = JSON.stringify({ tasks, tags, columns, boardTitle });
+    const u = 'data:application/json;charset=utf-8,' + encodeURIComponent(d);
+    const a = document.createElement('a');
+    a.href = u;
+    a.download = 'backup.json';
+    a.click();
+}
+
+function importData(i) {
+    const f = i.files[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = function (e) {
+        try {
+            const d = JSON.parse(e.target.result);
+            if (d.tasks) tasks = d.tasks;
+            if (d.tags) { tags = d.tags; localStorage.setItem('nexus_tags', JSON.stringify(tags)); }
+            if (d.columns) { columns = d.columns; localStorage.setItem('nexus_columns', JSON.stringify(columns)); }
+            if (d.boardTitle) { boardTitle = d.boardTitle; localStorage.setItem('nexus_title', boardTitle); }
+            document.getElementById('boardTitle').innerText = boardTitle;
+            save();
+            updateTagsDropdown();
+            alert("Backup restaurado!");
+        } catch (err) {
+            alert("Erro ao importar.");
+        }
+    };
+    r.readAsText(f);
+}
+
+// Metrics
+function updateMetrics(tl) {
+    columns.forEach(c => {
+        const count = tl.filter(t => t.status === c.id).length;
+        const el = document.getElementById(`count-${c.id}`);
+        if (el) el.innerText = count;
     });
-    const textColor = theme === 'dark' ? '#e6edf3' : '#18181b';
-    const chartColors = ['#ff6900', '#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#64748b'];
 
-    const ctxTags = document.getElementById('tagsChart').getContext('2d');
-    if (tagsChartInstance) tagsChartInstance.destroy();
-    tagsChartInstance = new Chart(ctxTags, {
-        type: 'doughnut',
-        data: { labels: Object.keys(tagCounts), datasets: [{ data: Object.values(tagCounts), backgroundColor: chartColors, borderWidth: 0 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: textColor, font: { size: 10 } } } } }
-    });
-
-    const ctxStatus = document.getElementById('statusChart').getContext('2d');
-    if (statusChartInstance) statusChartInstance.destroy();
-    statusChartInstance = new Chart(ctxStatus, {
-        type: 'bar',
-        data: { labels: labels, datasets: [{ label: 'Qtd', data: dataStatus, backgroundColor: '#3b82f6', borderRadius: 5 }] },
-        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { color: textColor } }, x: { ticks: { color: textColor } } }, plugins: { legend: { display: false } } }
-    });
-
-    const total = tasks.length;
+    const tot = tl.length;
     const doneCol = columns.find(c => c.id === 'done' || c.title.toLowerCase().includes('conclu'));
-    const doneCount = doneCol ? tasks.filter(t => t.status === doneCol.id).length : 0;
-    const pct = total === 0 ? 0 : Math.round((doneCount / total) * 100);
-    document.getElementById('statsSummary').innerHTML = `<strong>Total:</strong> ${total} tarefas. <strong>Concluído:</strong> ${pct}%`;
+    const done = doneCol ? tl.filter(t => t.status === doneCol.id).length : 0;
+    const pct = tot === 0 ? 0 : Math.round((done / tot) * 100);
+
+    document.getElementById('prog-fill').style.width = pct + '%';
+    document.getElementById('prog-val').innerText = pct + '%';
 }
 
+function clearAllDone() {
+    const doneCol = columns.find(c => c.id === 'done' || c.title.toLowerCase().includes('conclu'));
+    if (doneCol && confirm("Limpar tarefas concluídas?")) {
+        tasks = tasks.filter(t => t.status !== doneCol.id);
+        save();
+        toggleMenu();
+    } else {
+        alert("Nenhuma coluna de conclusão encontrada.");
+    }
+}
 
+// Notifications & Pomodoro
+function requestNotificationPermission() {
+    if (Notification.permission !== "granted") Notification.requestPermission();
+}
+
+function triggerNotification(t, b) {
+    document.getElementById('alertSound').play().catch(e => console.log(e));
+    if (Notification.permission === "granted") new Notification(t, { body: b, icon: 'assets/icon.png' });
+}
+
+function startTimer() {
+    requestNotificationPermission();
+    if (isTimerRunning) return;
+    isTimerRunning = true;
+    timerInterval = setInterval(() => {
+        timerSeconds--;
+        const m = Math.floor(timerSeconds / 60);
+        const s = timerSeconds % 60;
+        document.getElementById('pomodoroTimer').innerText = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+
+        if (timerSeconds <= 0) {
+            clearInterval(timerInterval);
+            isTimerRunning = false;
+            triggerNotification("Pomodoro!", "Tempo esgotado.");
+            alert("Pomodoro!");
+            timerSeconds = 1500;
+            document.getElementById('pomodoroTimer').innerText = "25:00";
+        }
+    }, 1000);
+}
+
+function resetTimer() {
+    clearInterval(timerInterval);
+    isTimerRunning = false;
+    timerSeconds = 1500;
+    document.getElementById('pomodoroTimer').innerText = "25:00";
+}
+
+// Helpers Gerais
 function getTodayString() {
     const d = new Date();
     return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
@@ -512,165 +773,100 @@ function formatDate(s) {
 }
 
 function fireConfetti() {
-    const end = Date.now() + 1000; (function frame() {
+    const end = Date.now() + 1000;
+    (function frame() {
         confetti({ particleCount: 2, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#ff6900', '#fff'] });
         confetti({ particleCount: 2, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#ff6900', '#fff'] });
         if (Date.now() < end) requestAnimationFrame(frame);
     }());
 }
 
-function updateTagsDropdown() {
-    const m = document.getElementById('modalTagInput');
-    const f = document.getElementById('filterTag');
-    m.innerHTML = tags.map(t => `<option value="${t}">${t}</option>`).join('');
-    f.innerHTML = `<option value="all">🏷️ Todas as Tags</option>` + tags.map(t => `<option value="${t}">${t}</option>`).join('');
-    f.value = currentTagFilter;
-
+function getAvatar(name) {
+    if (!name) return '';
+    const i = name.substring(0, 2).toUpperCase();
+    let h = 0;
+    for (let j = 0; j < name.length; j++) h = name.charCodeAt(j) + ((h << 5) - h);
+    const c = "#" + "00000".substring(0, 6 - (h & 0x00FFFFFF).toString(16).toUpperCase().length) + (h & 0x00FFFFFF).toString(16).toUpperCase();
+    return `<div class="avatar" style="background-color:${c}" title="${name}">${i}</div>`;
 }
 
-function addNewTag() {
-    const t = prompt("Tag:");
-    if (t && !tags.includes(t)) {
-        tags.push(t);
-        localStorage.setItem('nexus_tags', JSON.stringify(tags));
-        updateTagsDropdown();
-
-    }
+function updateMembersDropdown() {
+    const s = document.getElementById('modalMemberInput');
+    let h = `<option value="">👤 Ninguém</option>`;
+    members.forEach(m => h += `<option value="${m}">${m}</option>`);
+    s.innerHTML = h;
 }
 
-function updateMetrics(tl) {
-    columns.forEach(c => {
-        const count = tl.filter(t => t.status === c.id).length;
-        const el = document.getElementById(`count-${c.id}`);
-        if (el) el.innerText = count;
+// Stats Modal Logic
+function openStatsModal() {
+    document.getElementById('statsOverlay').classList.add('active');
+    renderCharts();
+}
 
+function closeStatsModal() {
+    document.getElementById('statsOverlay').classList.remove('active');
+}
+
+document.getElementById('statsOverlay').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('statsOverlay')) closeStatsModal();
+});
+
+function renderCharts() {
+    const tagCounts = {};
+    tags.forEach(t => tagCounts[t] = 0);
+    tasks.forEach(t => {
+        if (tagCounts[t.tag] !== undefined) tagCounts[t.tag]++;
+        else tagCounts[t.tag] = 1;
     });
-    const tot = tl.length;
-    const doneCol = columns.find(c => c.id === 'done' || c.title.toLowerCase().includes('conclu'));
-    const done = doneCol ? tl.filter(t => t.status === doneCol.id).length : 0;
-    const pct = tot === 0 ? 0 : Math.round((done / tot) * 100);
-    document.getElementById('prog-fill').style.width = pct + '%';
-    document.getElementById('prog-val').innerText = pct + '%';
 
-}
+    const labels = [];
+    const dataStatus = [];
+    columns.forEach(col => {
+        const count = tasks.filter(t => t.status === col.id).length;
+        labels.push(col.title);
+        dataStatus.push(count);
+    });
 
-function clearAllDone() {
-    const doneCol = columns.find(c => c.id === 'done' || c.title.toLowerCase().includes('conclu'));
-    if (doneCol && confirm("Limpar tarefas concluídas?")) {
-        tasks = tasks.filter(t => t.status !== doneCol.id);
-        save();
-        toggleMenu();
+    const textColor = theme === 'dark' ? '#e6edf3' : '#18181b';
+    const chartColors = ['#ff6900', '#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#64748b'];
 
-    }
-}
-
-function exportData() {
-    const d = JSON.stringify({ tasks, tags, columns, boardTitle });
-    const u = 'data:application/json; charset = utf - 8, ' + encodeURIComponent(d);
-    const a = document.createElement('a');
-    a.href = u;
-    a.download = 'backup.json'; a.click();
-}
-
-function importData(i) {
-    const f = i.files[0];
-    if (!f) return;
-    const r = new FileReader();
-    r.onload = function (e) {
-        try {
-            const d = JSON.parse(e.target.result);
-            if (d.tasks) tasks = d.tasks;
-            if (d.tags) {
-                tags = d.tags;
-                localStorage.setItem('nexus_tags', JSON.stringify(tags));
-
-            } if (d.columns) {
-                columns = d.columns;
-                localStorage.setItem('nexus_columns', JSON.stringify(columns));
-
-            } if (d.boardTitle) {
-                boardTitle = d.boardTitle;
-                localStorage.setItem('nexus_title', boardTitle);
-
-            } document.getElementById('boardTitle').innerText = boardTitle;
-            save();
-            updateTagsDropdown();
-            alert("Backup restaurado!");
-        } catch (err) {
-            alert("Erro ao importar.");
-
+    const ctxTags = document.getElementById('tagsChart').getContext('2d');
+    if (tagsChartInstance) tagsChartInstance.destroy();
+    tagsChartInstance = new Chart(ctxTags, {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(tagCounts),
+            datasets: [{ data: Object.values(tagCounts), backgroundColor: chartColors, borderWidth: 0 }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom', labels: { color: textColor, font: { size: 10 } } } }
         }
-    };
-    r.readAsText(f);
+    });
 
-}
-
-function saveTitle() {
-    boardTitle = document.getElementById('boardTitle').innerText;
-    localStorage.setItem('nexus_title', boardTitle);
-
-}
-
-function applyFilters() {
-    currentTagFilter = document.getElementById('filterTag').value;
-    currentPriorityFilter = document.getElementById('filterPriority').value;
-    searchTerm = document.getElementById('searchInput').value.toLowerCase();
-    render();
-
-}
-
-function toggleTheme() {
-    theme = theme === 'light' ? 'dark' : 'light';
-    document.body.setAttribute('data-theme', theme);
-    localStorage.setItem('nexus_theme', theme);
-    applyBackground(currentBg);
-    if (document.getElementById('statsOverlay').classList.contains('active')) renderCharts();
-
-}
-
-function requestNotificationPermission() {
-    if (Notification.permission !== "granted") Notification.requestPermission();
-
-}
-
-function triggerNotification(t, b) {
-    document.getElementById('alertSound').play().catch(e => console.log(e));
-    if (Notification.permission === "granted") new Notification(t, { body: b, icon: 'assets/icon.png' });
-
-}
-
-function startTimer() {
-    requestNotificationPermission();
-    if (isTimerRunning) return;
-    isTimerRunning = true;
-    timerInterval = setInterval(() => {
-        timerSeconds--;
-        const m = Math.floor(timerSeconds / 60);
-        const s = timerSeconds % 60;
-        document.getElementById('pomodoroTimer').innerText = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-        if (timerSeconds <= 0) {
-            clearInterval(timerInterval);
-            isTimerRunning = false;
-            triggerNotification("Pomodoro!", "Tempo esgotado.");
-            alert("Pomodoro!");
-            timerSeconds = 1500;
-            document.getElementById('pomodoroTimer').innerText = "25:00";
-
+    const ctxStatus = document.getElementById('statusChart').getContext('2d');
+    if (statusChartInstance) statusChartInstance.destroy();
+    statusChartInstance = new Chart(ctxStatus, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{ label: 'Qtd', data: dataStatus, backgroundColor: '#3b82f6', borderRadius: 5 }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { beginAtZero: true, ticks: { color: textColor } },
+                x: { ticks: { color: textColor } }
+            },
+            plugins: { legend: { display: false } }
         }
-    }, 1000);
+    });
 
+    const total = tasks.length;
+    const doneCol = columns.find(c => c.id === 'done' || c.title.toLowerCase().includes('conclu'));
+    const doneCount = doneCol ? tasks.filter(t => t.status === doneCol.id).length : 0;
+    const pct = total === 0 ? 0 : Math.round((doneCount / total) * 100);
+    document.getElementById('statsSummary').innerHTML = `<strong>Total:</strong> ${total} tarefas. <strong>Concluído:</strong> ${pct}%`;
 }
-
-function resetTimer() {
-    clearInterval(timerInterval);
-    isTimerRunning = false;
-    timerSeconds = 1500;
-    document.getElementById('pomodoroTimer').innerText = "25:00";
-
-}
-
-const installBtn = document.getElementById('installPwaBtn');
-let deferredPrompt;
-window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; installBtn.style.display = 'block'; });
-installBtn.addEventListener('click', async () => { if (deferredPrompt) { deferredPrompt.prompt(); const { outcome } = await deferredPrompt.userChoice; deferredPrompt = null; if (outcome === 'accepted') installBtn.style.display = 'none'; } });
-window.addEventListener('appinstalled', () => { installBtn.style.display = 'none'; });

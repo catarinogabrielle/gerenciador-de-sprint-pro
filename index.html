@@ -7,15 +7,13 @@
     <title>Gerenciador de Sprint Pro</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-    <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#010409">
     <link rel="apple-touch-icon" href="assets/icon.png">
     <link rel="icon" type="image/x-icon" href="assets/icon.ico">
 </head>
 
 <body>
-
-    <div class="overlay" id="overlay" onclick="toggleMenu()"></div>
+    <div class="overlay" id="overlay"></div>
     <audio id="alertSound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg"></audio>
 
     <div class="modal-overlay" id="modalOverlay">
@@ -23,17 +21,25 @@
             <h3 id="modalTitle" style="margin-top:0; margin-bottom: 20px;">Nova Tarefa</h3>
             <div class="form-group">
                 <label>Título da Tarefa</label>
-                <input type="text" id="modalTaskInput" class="input-main" placeholder="Ex: Criar tela de login..."
-                    autofocus>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="modalTaskInput" class="input-main" placeholder="Ex: Criar tela de login..."
+                        autofocus>
+                    <button class="btn-mic" onclick="startVoice('modalTaskInput', this)"
+                        title="Ditar título">🎙️</button>
+                </div>
             </div>
             <div class="form-group">
                 <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 5px;">
                     <label style="margin:0;">Descrição (Markdown Ativo ✨)</label>
-                    <div class="tab-buttons">
-                        <button type="button" class="tab-btn active" onclick="switchDescTab('write')" id="btnWrite">✏️
-                            Escrever</button>
-                        <button type="button" class="tab-btn" onclick="switchDescTab('preview')" id="btnPreview">👁️
-                            Visualizar</button>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <button class="btn-mic-small" onclick="startVoice('modalDescriptionInput', this)"
+                            title="Ditar descrição" id="descMicBtn">🎙️ Ditar</button>
+                        <div class="tab-buttons">
+                            <button type="button" class="tab-btn active" onclick="switchDescTab('write')"
+                                id="btnWrite">✏️ Escrever</button>
+                            <button type="button" class="tab-btn" onclick="switchDescTab('preview')" id="btnPreview">👁️
+                                Visualizar</button>
+                        </div>
                     </div>
                 </div>
                 <textarea id="modalDescriptionInput" class="input-main" rows="5"
@@ -57,6 +63,12 @@
                         <button class="btn-secondary" onclick="addNewTag()" title="Criar nova tag"
                             style="padding: 10px;">+</button>
                     </div>
+                </div>
+                <div class="form-group">
+                    <label>Responsável</label>
+                    <select id="modalMemberInput">
+                        <option value="">👤 Ninguém</option>
+                    </select>
                 </div>
                 <div class="form-group">
                     <label>Prioridade</label>
@@ -109,8 +121,6 @@
         </div>
     </div>
 
-    <div class="overlay" id="overlay"></div>
-
     <nav class="sidebar" id="sidebar">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
             <h2 style="font-weight: 800; font-size: 1.2rem; margin: 0;">Configurações</h2>
@@ -143,17 +153,8 @@
         </div>
 
         <button class="btn-primary" style="width: 100%; margin-top: 15px; background: #3b82f6; border-color: #3b82f6;"
-            onclick="openStatsModal()">
-            📊 Ver Relatórios
-        </button>
-
-        <button class="btn-primary" style="width: 100%; margin-top: 12px;" onclick="toggleTheme()">🌓 Alternar
-            Tema</button>
-
-        <button id="installPwaBtn" class="btn-primary"
-            style="width: 100%; margin-top: 12px; background: #64748b; display: none;">
-            📲 Instalar App
-        </button>
+            onclick="openStatsModal()">📊 Relatórios</button>
+        <button class="btn-primary" style="width: 100%; margin-top: 12px;" onclick="toggleTheme()">🌓 Tema</button>
 
         <div style="margin-top: 20px; border-top: 1px solid var(--border); padding-top: 15px;">
             <label
@@ -166,12 +167,9 @@
                 <input type="file" id="fileInput" style="display: none;" onchange="importData(this)">
             </div>
         </div>
-
         <button class="btn-primary" style="width: 100%; margin-top: 12px; background: #ef4444; border-color: #ef4444;"
-            onclick="clearAllDone()">🧹 Limpar Concluídos</button>
-
-        <div style="margin-top: auto; font-size: 11px; color: #94a3b8; margin-top: 15px;">Gerenciador de Sprint Pro |
-            2026</div>
+            onclick="clearAllDone()">🧹 Limpar</button>
+        <div style="margin-top: auto; font-size: 11px; color: #94a3b8; margin-top: 15px;">Sprint Pro | 2026</div>
     </nav>
 
     <header>
@@ -183,7 +181,6 @@
         <div class="filter-wrapper">
             <button class="btn-secondary" onclick="addColumn()" style="padding: 6px 12px; height: 32px;">+
                 Coluna</button>
-
             <input type="text" id="searchInput" class="search-input" placeholder="🔍 Buscar..."
                 oninput="applyFilters()">
             <select id="filterTag" onchange="applyFilters()" class="filter-select">
@@ -212,11 +209,6 @@
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="script.js"></script>
-    <script>
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('./sw.js').catch(e => console.log(e));
-        }
-    </script>
 </body>
 
 </html>
