@@ -1,6 +1,88 @@
-let tasks = JSON.parse(localStorage.getItem('nexus_tasks_v3')) || [];
+const firebaseConfig = {
+    apiKey: "AIzaSyDyWy1LpQesOhWCZhx1eB2xUJckuJyb7aU",
+    authDomain: "gerenciador-de-sprint-pro.firebaseapp.com",
+    projectId: "gerenciador-de-sprint-pro",
+    storageBucket: "gerenciador-de-sprint-pro.firebasestorage.app",
+    messagingSenderId: "899758954780",
+    appId: "1:899758954780:web:932c8fd50b8ae6978742d9",
+    measurementId: "G-NEKMK6Z2TB"
+};
 
-let tags = JSON.parse(localStorage.getItem('nexus_tags')) || [
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+let currentUser = null;
+
+auth.onAuthStateChanged(user => {
+    const loginScreen = document.getElementById('loginOverlay');
+
+    if (user) {
+        currentUser = user;
+        loginScreen.style.display = 'none';
+        loadFromFirebase();
+    } else {
+        currentUser = null;
+        loginScreen.style.display = 'flex';
+    }
+});
+
+async function loginFirebase() {
+    const email = document.getElementById('loginEmail').value;
+    const pass = document.getElementById('loginPassword').value;
+    const errObj = document.getElementById('loginError');
+
+    if (!email || !pass) {
+        errObj.innerText = "Preencha e-mail e senha.";
+        errObj.style.display = 'block';
+        return;
+    }
+
+    try {
+        await auth.signInWithEmailAndPassword(email, pass);
+        errObj.style.display = 'none';
+    } catch (error) {
+        errObj.innerText = "Erro: E-mail ou senha incorretos.";
+        errObj.style.display = 'block';
+    }
+}
+
+async function registerFirebase() {
+    const email = document.getElementById('loginEmail').value;
+    const pass = document.getElementById('loginPassword').value;
+    const errObj = document.getElementById('loginError');
+
+    if (!email || !pass) {
+        errObj.innerText = "Preencha e-mail e senha.";
+        errObj.style.display = 'block';
+        return;
+    }
+
+    try {
+        await auth.createUserWithEmailAndPassword(email, pass);
+        errObj.style.display = 'none';
+        await showSysAlert("Conta criada com sucesso! Preparando seu ambiente em nuvem...");
+    } catch (error) {
+        errObj.innerText = "Erro: " + error.message;
+        errObj.style.display = 'block';
+    }
+}
+
+function logoutFirebase() {
+    auth.signOut().then(() => {
+        window.location.reload();
+    });
+}
+
+let theme = localStorage.getItem('nexus_theme') || 'light';
+let currentBg = localStorage.getItem('nexus_bg') || 'default';
+
+let allBoardsData = {};
+let boards = [];
+let currentBoardId = null;
+let boardTitle = '';
+let columns = [];
+let tasks = [];
+let tags = [
     "💻 Desenvolvimento",
     "🐛 Bug Fix",
     "🏋️ Treino",
@@ -8,44 +90,6 @@ let tags = JSON.parse(localStorage.getItem('nexus_tags')) || [
     "🚀 Deploy",
     "🎨 Design"
 ];
-
-let boards = JSON.parse(localStorage.getItem('nexus_boards_list')) || [];
-let currentBoardId = localStorage.getItem('nexus_active_board_id');
-
-if (boards.length === 0) {
-    const oldTasks = JSON.parse(localStorage.getItem('nexus_tasks_v3')) || [];
-    const oldColumns = JSON.parse(localStorage.getItem('nexus_columns')) || [];
-    const oldTitle = localStorage.getItem('nexus_title') || 'Sprint Principal';
-    const firstBoardId = 'board-' + Date.now();
-
-    boards.push({
-        id: firstBoardId,
-        title: oldTitle
-    });
-    localStorage.setItem('nexus_boards_list', JSON.stringify(boards));
-
-    localStorage.setItem(`nexus_tasks_${firstBoardId}`, JSON.stringify(oldTasks));
-    localStorage.setItem(`nexus_columns_${firstBoardId}`, JSON.stringify(oldColumns));
-
-    currentBoardId = firstBoardId;
-    localStorage.setItem('nexus_active_board_id', currentBoardId);
-}
-
-let columns = JSON.parse(localStorage.getItem(`nexus_columns_${currentBoardId}`)) || [];
-
-if (!columns || columns.length === 0) {
-    columns = [
-        { id: 'todo', title: 'Pendências' },
-        { id: 'doing', title: 'Em Andamento' },
-        { id: 'done', title: 'Concluído' }
-    ];
-}
-
-tasks = JSON.parse(localStorage.getItem(`nexus_tasks_${currentBoardId}`)) || [];
-
-let theme = localStorage.getItem('nexus_theme') || 'light';
-let currentBg = localStorage.getItem('nexus_bg') || 'default';
-let boardTitle = boards.find(b => b.id === currentBoardId)?.title || 'Meu Quadro';
 
 let currentTagFilter = 'all';
 let currentPriorityFilter = 'all';
@@ -60,17 +104,179 @@ let isTimerRunning = false;
 let tagsChartInstance = null;
 let statusChartInstance = null;
 
+async function loadFromFirebase() {
+    if (!currentUser) {
+        return;
+    }
+
+    try {
+        const docRef = db.collection('users').doc(currentUser.uid);
+        const doc = await docRef.get();
+
+        if (doc.exists) {
+            const data = doc.data();
+
+            boards = data.boards || [];
+            currentBoardId = data.currentBoardId || (boards.length > 0 ? boards[0].id : null);
+            tags = data.tags || [];
+            allBoardsData = {};
+
+            if (data.boardData) {
+                for (const [bId, bData] of Object.entries(data.boardData)) {
+                    allBoardsData[bId] = {
+                        tasks: JSON.parse(bData.tasks_string || "[]"),
+                        columns: JSON.parse(bData.columns_string || "[]")
+                    };
+                }
+            }
+
+            if (currentBoardId && allBoardsData[currentBoardId]) {
+                tasks = allBoardsData[currentBoardId].tasks || [];
+                columns = allBoardsData[currentBoardId].columns || [];
+            } else {
+                tasks = [];
+                columns = [
+                    { id: 'todo', title: 'Pendências' },
+                    { id: 'doing', title: 'Em Andamento' },
+                    { id: 'done', title: 'Concluído' }
+                ];
+            }
+
+            const currentBoardObj = boards.find(b => b.id === currentBoardId);
+            boardTitle = currentBoardObj ? currentBoardObj.title : 'Meu Quadro';
+            document.getElementById('boardTitle').innerText = boardTitle;
+
+            renderBoardsList();
+            updateTagsDropdown();
+            render();
+
+        } else {
+            const newId = 'board-' + Date.now();
+
+            boards = [{ id: newId, title: 'Meu Primeiro Quadro' }];
+            currentBoardId = newId;
+            tasks = [];
+            columns = [
+                { id: 'todo', title: 'Pendências' },
+                { id: 'doing', title: 'Em Andamento' },
+                { id: 'done', title: 'Concluído' }
+            ];
+
+            allBoardsData = {};
+            allBoardsData[currentBoardId] = {
+                tasks: tasks,
+                columns: columns
+            };
+
+            boardTitle = 'Meu Primeiro Quadro';
+            document.getElementById('boardTitle').innerText = boardTitle;
+
+            renderBoardsList();
+            updateTagsDropdown();
+            render();
+            syncToFirebase();
+        }
+    } catch (error) {
+        console.error("Erro loadFromFirebase:", error);
+        await showSysAlert("Erro ao baixar dados da nuvem.");
+    }
+}
+
+function syncToFirebase() {
+    if (!currentUser) {
+        return;
+    }
+
+    if (currentBoardId) {
+        allBoardsData[currentBoardId] = {
+            tasks: tasks || [],
+            columns: columns || []
+        };
+    }
+
+    const payloadBoardData = {};
+
+    for (const [bId, bData] of Object.entries(allBoardsData)) {
+        const validId = bId ? String(bId) : `board-${Date.now()}`;
+        payloadBoardData[validId] = {
+            tasks_string: JSON.stringify(bData.tasks || []),
+            columns_string: JSON.stringify(bData.columns || [])
+        };
+    }
+
+    const rawPayload = {
+        boards: boards || [],
+        currentBoardId: currentBoardId || "",
+        tags: tags || [],
+        boardData: payloadBoardData
+    };
+
+    const cleanPayload = JSON.parse(JSON.stringify(rawPayload));
+    cleanPayload.lastUpdated = firebase.firestore.FieldValue.serverTimestamp();
+
+    db.collection('users').doc(currentUser.uid).set(cleanPayload)
+        .then(() => {
+            console.log("Salvo na nuvem com sucesso!");
+        })
+        .catch(err => {
+            console.error("Erro ao salvar:", err);
+            showSysAlert("Erro do Firebase: " + err.message);
+        });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     document.body.setAttribute('data-theme', theme);
-    document.getElementById('boardTitle').innerText = boardTitle;
     applyBackground(currentBg);
 
     document.addEventListener('paste', handlePaste);
     document.getElementById('overlay').addEventListener('click', toggleMenu);
 
-    updateTagsDropdown();
-    renderBoardsList();
-    render();
+    const modalOverlay = document.getElementById('modalOverlay');
+
+    modalOverlay.addEventListener('mousedown', (e) => {
+        if (e.target === modalOverlay) {
+            const titleInput = document.getElementById('modalTaskInput').value.trim();
+
+            if (!titleInput && !editingTaskId) {
+                closeModal();
+            } else {
+                saveTaskBtnClick();
+            }
+        }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (!modalOverlay.classList.contains('active')) {
+            return;
+        }
+
+        if (document.getElementById('sysOverlay').classList.contains('active')) {
+            return;
+        }
+
+        if (e.key === 'Escape') {
+            closeModal();
+            return;
+        }
+
+        if (e.key === 'Enter') {
+            const activeId = document.activeElement.id;
+
+            if (activeId === 'modalDescriptionInput' || activeId === 'subtaskInput' || activeId === 'commentInput') {
+                return;
+            }
+
+            e.preventDefault();
+
+            const titleInput = document.getElementById('modalTaskInput').value.trim();
+
+            if (!titleInput && !editingTaskId) {
+                closeModal();
+            } else {
+                saveTaskBtnClick();
+            }
+        }
+    });
 
     if (Notification.permission !== "granted" && Notification.permission !== "denied") {
         Notification.requestPermission();
@@ -105,8 +311,8 @@ function showSysModal(title, message, type = 'alert', placeholder = '') {
         }
 
         btnConfirm.innerText = 'OK';
-
         btnConfirm.className = 'btn-primary';
+
         if (title.toLowerCase().includes('excluir') || title.toLowerCase().includes('limpar')) {
             btnConfirm.style.background = '#ef4444';
             btnConfirm.style.borderColor = '#ef4444';
@@ -146,6 +352,7 @@ function showSysModal(title, message, type = 'alert', placeholder = '') {
 
         inputEl.onkeydown = (e) => {
             if (e.key === 'Enter') {
+                e.preventDefault();
                 btnConfirm.click();
             }
         };
@@ -180,7 +387,7 @@ function toggleMenu() {
 function renderBoardsList() {
     const list = document.getElementById('boardsList');
 
-    const htmlContent = boards.map(board => {
+    list.innerHTML = boards.map(board => {
         const activeClass = board.id === currentBoardId ? 'active' : '';
         return `
             <div class="board-item ${activeClass}" onclick="switchBoard('${board.id}')">
@@ -191,8 +398,6 @@ function renderBoardsList() {
             </div>
         `;
     }).join('');
-
-    list.innerHTML = htmlContent;
 }
 
 async function createNewBoard() {
@@ -209,16 +414,14 @@ async function createNewBoard() {
         title: title
     });
 
-    localStorage.setItem('nexus_boards_list', JSON.stringify(boards));
-
-    const defaultCols = [
-        { id: 'todo', title: 'A Fazer' },
-        { id: 'doing', title: 'Fazendo' },
-        { id: 'done', title: 'Feito' }
-    ];
-
-    localStorage.setItem(`nexus_tasks_${newId}`, JSON.stringify([]));
-    localStorage.setItem(`nexus_columns_${newId}`, JSON.stringify(defaultCols));
+    allBoardsData[newId] = {
+        tasks: [],
+        columns: [
+            { id: 'todo', title: 'Pendências' },
+            { id: 'doing', title: 'Em Andamento' },
+            { id: 'done', title: 'Concluído' }
+        ]
+    };
 
     switchBoard(newId);
 }
@@ -228,14 +431,17 @@ function switchBoard(boardId) {
 
     if (currentBoard) {
         currentBoard.title = document.getElementById('boardTitle').innerText;
-        localStorage.setItem('nexus_boards_list', JSON.stringify(boards));
     }
 
-    currentBoardId = boardId;
-    localStorage.setItem('nexus_active_board_id', currentBoardId);
+    allBoardsData[currentBoardId] = {
+        tasks: tasks,
+        columns: columns
+    };
 
-    tasks = JSON.parse(localStorage.getItem(`nexus_tasks_${currentBoardId}`)) || [];
-    columns = JSON.parse(localStorage.getItem(`nexus_columns_${currentBoardId}`)) || [];
+    currentBoardId = boardId;
+
+    tasks = allBoardsData[currentBoardId].tasks || [];
+    columns = allBoardsData[currentBoardId].columns || [];
 
     const newBoard = boards.find(b => b.id === currentBoardId);
     boardTitle = newBoard ? newBoard.title : 'Quadro';
@@ -243,6 +449,7 @@ function switchBoard(boardId) {
 
     render();
     renderBoardsList();
+    syncToFirebase();
 }
 
 async function deleteCurrentBoard() {
@@ -251,18 +458,11 @@ async function deleteCurrentBoard() {
         return;
     }
 
-    const confirmed = await showSysConfirm(
-        "Tem certeza? Isso apagará todas as tarefas deste quadro permanentemente.",
-        "Excluir Quadro"
-    );
+    const confirmed = await showSysConfirm("Tem certeza? Isso apagará todas as tarefas deste quadro permanentemente.", "Excluir Quadro");
 
     if (confirmed) {
-        localStorage.removeItem(`nexus_tasks_${currentBoardId}`);
-        localStorage.removeItem(`nexus_columns_${currentBoardId}`);
-
+        delete allBoardsData[currentBoardId];
         boards = boards.filter(b => b.id !== currentBoardId);
-        localStorage.setItem('nexus_boards_list', JSON.stringify(boards));
-
         switchBoard(boards[0].id);
     }
 }
@@ -273,21 +473,43 @@ function saveTitle() {
 
     if (boardIndex > -1) {
         boards[boardIndex].title = boardTitle;
-        localStorage.setItem('nexus_boards_list', JSON.stringify(boards));
     }
 
     renderBoardsList();
+    syncToFirebase();
 }
 
 function save() {
-    localStorage.setItem(`nexus_tasks_${currentBoardId}`, JSON.stringify(tasks));
-    localStorage.setItem(`nexus_columns_${currentBoardId}`, JSON.stringify(columns));
     render();
+    syncToFirebase();
 }
 
 function saveColumns() {
-    localStorage.setItem(`nexus_columns_${currentBoardId}`, JSON.stringify(columns));
     render();
+    syncToFirebase();
+}
+
+function compressImage(base64Str, maxWidth = 800, callback) {
+    const img = new Image();
+    img.src = base64Str;
+
+    img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+            height = Math.round((height *= maxWidth / width));
+            width = maxWidth;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        callback(canvas.toDataURL('image/jpeg', 0.7));
+    };
 }
 
 function handleFileSelect(input) {
@@ -296,7 +518,9 @@ function handleFileSelect(input) {
         const reader = new FileReader();
 
         reader.onload = function (e) {
-            setCoverImage(e.target.result);
+            compressImage(e.target.result, 800, (compressedData) => {
+                setCoverImage(compressedData);
+            });
         }
 
         reader.readAsDataURL(file);
@@ -319,7 +543,9 @@ function handlePaste(e) {
                 const reader = new FileReader();
 
                 reader.onload = function (event) {
-                    setCoverImage(event.target.result);
+                    compressImage(event.target.result, 800, (compressedData) => {
+                        setCoverImage(compressedData);
+                    });
                 };
 
                 reader.readAsDataURL(blob);
@@ -331,43 +557,30 @@ function handlePaste(e) {
 }
 
 function setCoverImage(base64String) {
-    const preview = document.getElementById('coverPreview');
-    const placeholder = document.getElementById('coverPlaceholder');
-    const hiddenInput = document.getElementById('modalCoverInput');
-    const removeBtn = document.getElementById('removeCoverBtn');
-
-    preview.src = base64String;
-    preview.style.display = 'block';
-    placeholder.style.display = 'none';
-    removeBtn.style.display = 'block';
-    hiddenInput.value = base64String;
+    document.getElementById('coverPreview').src = base64String;
+    document.getElementById('coverPreview').style.display = 'block';
+    document.getElementById('coverPlaceholder').style.display = 'none';
+    document.getElementById('removeCoverBtn').style.display = 'block';
+    document.getElementById('modalCoverInput').value = base64String;
 }
 
 function removeCover(e) {
     e.stopPropagation();
 
-    const preview = document.getElementById('coverPreview');
-    const placeholder = document.getElementById('coverPlaceholder');
-    const hiddenInput = document.getElementById('modalCoverInput');
-    const removeBtn = document.getElementById('removeCoverBtn');
-    const fileInput = document.getElementById('fileCoverInput');
-
-    preview.src = '';
-    preview.style.display = 'none';
-    placeholder.style.display = 'block';
-    removeBtn.style.display = 'none';
-
-    hiddenInput.value = '';
-    fileInput.value = '';
+    document.getElementById('coverPreview').src = '';
+    document.getElementById('coverPreview').style.display = 'none';
+    document.getElementById('coverPlaceholder').style.display = 'block';
+    document.getElementById('removeCoverBtn').style.display = 'none';
+    document.getElementById('modalCoverInput').value = '';
+    document.getElementById('fileCoverInput').value = '';
 }
 
 async function addColumn() {
     const title = await showSysPrompt("Nome da nova coluna:");
 
     if (title) {
-        const id = 'col-' + Date.now();
         columns.push({
-            id: id,
+            id: 'col-' + Date.now(),
             title: title
         });
         saveColumns();
@@ -375,16 +588,12 @@ async function addColumn() {
 }
 
 async function deleteColumn(colId) {
-    const tasksInCol = tasks.filter(t => t.status === colId);
-
-    if (tasksInCol.length > 0) {
+    if (tasks.filter(t => t.status === colId).length > 0) {
         await showSysAlert("Esta coluna contém tarefas. Mova-as antes de excluir.");
         return;
     }
 
-    const confirmed = await showSysConfirm("Tem certeza que deseja excluir esta coluna?", "Excluir Coluna");
-
-    if (confirmed) {
+    if (await showSysConfirm("Tem certeza que deseja excluir esta coluna?", "Excluir Coluna")) {
         columns = columns.filter(c => c.id !== colId);
         saveColumns();
     }
@@ -406,7 +615,6 @@ function render() {
     const filteredTasks = tasks.filter(t => {
         const matchTag = currentTagFilter === 'all' || t.tag === currentTagFilter;
         const matchPriority = currentPriorityFilter === 'all' || t.priority === currentPriorityFilter;
-
         const term = searchTerm ? searchTerm.toLowerCase() : '';
         const titleMatch = t.text.toLowerCase().includes(term);
         const descMatch = t.description && t.description.toLowerCase().includes(term);
@@ -440,12 +648,11 @@ function render() {
         board.appendChild(columnEl);
 
         const container = columnEl.querySelector('.tasks-container');
-        const tasksForCol = filteredTasks.filter(t => t.status === col.id);
 
-        tasksForCol.forEach(t => {
+        filteredTasks.filter(t => t.status === col.id).forEach(t => {
             const isDoneCol = col.id === 'done' || col.title.toLowerCase().includes('conclu');
-
             const card = document.createElement('div');
+
             card.className = `card ${t.status === 'done' || isDoneCol ? 'finalizado' : ''}`;
             card.id = t.id;
             card.onclick = () => openModal(t.id);
@@ -458,10 +665,12 @@ function render() {
             let dateHtml = '';
             if (t.startDate || t.endDate) {
                 const isOverdue = t.endDate && t.endDate < getTodayString() && !isDoneCol;
-                const dateClass = isOverdue ? 'date-display overdue' : 'date-display';
-                const icon = isOverdue ? '⚠️ ' : '📅 ';
 
-                dateHtml = `<div class="${dateClass}">${icon} ${formatDate(t.startDate)} ${t.endDate ? '- ' + formatDate(t.endDate) : ''}</div>`;
+                dateHtml = `
+                    <div class="${isOverdue ? 'date-display overdue' : 'date-display'}">
+                        ${isOverdue ? '⚠️ ' : '📅 '} ${formatDate(t.startDate)} ${t.endDate ? '- ' + formatDate(t.endDate) : ''}
+                    </div>
+                `;
             }
 
             const descIcon = t.description && t.description.trim() !== '' ? '<span class="has-desc-icon">📄</span>' : '';
@@ -510,16 +719,13 @@ function render() {
 }
 
 function setupCardDragAndDrop() {
-    const containers = document.querySelectorAll('.tasks-container');
-
-    containers.forEach(container => {
+    document.querySelectorAll('.tasks-container').forEach(container => {
         new Sortable(container, {
             group: 'shared',
             animation: 150,
             ghostClass: 'sortable-ghost',
             delay: 100,
             delayOnTouchOnly: true,
-
             onEnd: function (evt) {
                 const itemEl = evt.item;
                 const newStatus = evt.to.getAttribute('data-status');
@@ -534,9 +740,11 @@ function setupCardDragAndDrop() {
                         task.endDate = getTodayString();
                         fireConfetti();
                     }
+
                     if (wasDone && !isDoneTarget) {
                         task.endDate = '';
                     }
+
                     task.status = newStatus;
                 }
 
@@ -552,9 +760,7 @@ function setupCardDragAndDrop() {
                     }
                 });
 
-                const hiddenTasks = Array.from(visibleTasksMap.values());
-                tasks = [...reorderedTasks, ...hiddenTasks];
-
+                tasks = [...reorderedTasks, ...Array.from(visibleTasksMap.values())];
                 save();
             }
         });
@@ -562,20 +768,16 @@ function setupCardDragAndDrop() {
 }
 
 function setupColumnDragAndDrop() {
-    const board = document.getElementById('boardMain');
-
-    new Sortable(board, {
+    new Sortable(document.getElementById('boardMain'), {
         animation: 150,
         handle: '.column-header',
         ghostClass: 'sortable-ghost-column',
         delay: 100,
         delayOnTouchOnly: true,
-
-        onEnd: function (evt) {
+        onEnd: function () {
             const newColumnOrder = [];
-            const domColumns = document.querySelectorAll('.column');
 
-            domColumns.forEach(colEl => {
+            document.querySelectorAll('.column').forEach(colEl => {
                 const colData = columns.find(c => c.id === colEl.id);
                 if (colData) {
                     newColumnOrder.push(colData);
@@ -594,13 +796,26 @@ function openModal(taskId = null, initialStatus = null) {
     const deleteBtn = document.getElementById('modalDeleteBtn');
     const modalTitle = document.getElementById('modalTitle');
 
-    clearModalFields();
+    document.getElementById('modalTaskInput').value = '';
+    document.getElementById('modalDescriptionInput').value = '';
+    document.getElementById('modalDateStart').value = '';
+    document.getElementById('modalDateEnd').value = '';
+    document.getElementById('subtaskInput').value = '';
+    document.getElementById('subtaskList').innerHTML = '';
+    document.getElementById('modalTagInput').selectedIndex = 0;
+    document.getElementById('modalPriorityInput').selectedIndex = 0;
+    document.getElementById('commentsList').innerHTML = '';
+    document.getElementById('commentInput').value = '';
+
+    removeCover({ stopPropagation: () => { } });
 
     if (taskId) {
         editingTaskId = taskId;
         const task = tasks.find(t => t.id === taskId);
 
-        if (!task) return;
+        if (!task) {
+            return;
+        }
 
         modalTitle.innerText = "Detalhes da Tarefa";
         saveBtn.innerText = "Atualizar";
@@ -634,14 +849,15 @@ function openModal(taskId = null, initialStatus = null) {
 
         tempSubtasks = [];
         tempComments = [];
+
         renderSubtasksList();
         renderCommentsList();
 
         document.getElementById('modalDateStart').value = getTodayString();
-        const defaultStatus = initialStatus || (columns.length > 0 ? columns[0].id : 'todo');
-        saveBtn.onclick = () => saveTaskBtnClick(defaultStatus);
+        saveBtn.onclick = () => saveTaskBtnClick(initialStatus || (columns.length > 0 ? columns[0].id : 'todo'));
 
         switchDescTab('write');
+
         setTimeout(() => {
             document.getElementById('modalTaskInput').focus();
         }, 100);
@@ -655,23 +871,6 @@ function closeModal() {
     editingTaskId = null;
 }
 
-function clearModalFields() {
-    document.getElementById('modalTaskInput').value = '';
-    document.getElementById('modalDescriptionInput').value = '';
-    document.getElementById('modalDateStart').value = '';
-    document.getElementById('modalDateEnd').value = '';
-    document.getElementById('subtaskInput').value = '';
-    document.getElementById('subtaskList').innerHTML = '';
-    document.getElementById('modalTagInput').selectedIndex = 0;
-    document.getElementById('modalPriorityInput').selectedIndex = 0;
-
-    document.getElementById('modalCoverInput').value = '';
-    document.getElementById('commentsList').innerHTML = '';
-    document.getElementById('commentInput').value = '';
-
-    removeCover({ stopPropagation: () => { } });
-}
-
 async function saveTaskBtnClick(statusOverride = null) {
     const titleInput = document.getElementById('modalTaskInput');
 
@@ -682,48 +881,37 @@ async function saveTaskBtnClick(statusOverride = null) {
     }
 
     if (editingTaskId) {
-        updateExistingTask(editingTaskId);
+        const taskIndex = tasks.findIndex(t => t.id === editingTaskId);
+
+        if (taskIndex > -1) {
+            tasks[taskIndex].text = titleInput.value;
+            tasks[taskIndex].description = document.getElementById('modalDescriptionInput').value;
+            tasks[taskIndex].tag = document.getElementById('modalTagInput').value;
+            tasks[taskIndex].priority = document.getElementById('modalPriorityInput').value;
+            tasks[taskIndex].cover = document.getElementById('modalCoverInput').value;
+            tasks[taskIndex].startDate = document.getElementById('modalDateStart').value;
+            tasks[taskIndex].endDate = document.getElementById('modalDateEnd').value;
+            tasks[taskIndex].subtasks = tempSubtasks;
+            tasks[taskIndex].comments = tempComments;
+        }
     } else {
-        const status = statusOverride || (columns.length > 0 ? columns[0].id : 'todo');
-        createNewTask(status);
+        tasks.push({
+            id: 'id-' + Date.now(),
+            text: titleInput.value,
+            description: document.getElementById('modalDescriptionInput').value,
+            tag: document.getElementById('modalTagInput').value,
+            priority: document.getElementById('modalPriorityInput').value,
+            cover: document.getElementById('modalCoverInput').value,
+            startDate: document.getElementById('modalDateStart').value,
+            endDate: document.getElementById('modalDateEnd').value,
+            subtasks: tempSubtasks,
+            comments: tempComments,
+            status: statusOverride || (columns.length > 0 ? columns[0].id : 'todo')
+        });
     }
-}
 
-function createNewTask(status) {
-    const newTask = {
-        id: 'id-' + Date.now(),
-        text: document.getElementById('modalTaskInput').value,
-        description: document.getElementById('modalDescriptionInput').value,
-        tag: document.getElementById('modalTagInput').value,
-        priority: document.getElementById('modalPriorityInput').value,
-        cover: document.getElementById('modalCoverInput').value,
-        startDate: document.getElementById('modalDateStart').value,
-        endDate: document.getElementById('modalDateEnd').value,
-        subtasks: tempSubtasks,
-        comments: tempComments,
-        status: status
-    };
-
-    tasks.push(newTask);
-    saveAndClose();
-}
-
-function updateExistingTask(id) {
-    const taskIndex = tasks.findIndex(t => t.id === id);
-
-    if (taskIndex > -1) {
-        tasks[taskIndex].text = document.getElementById('modalTaskInput').value;
-        tasks[taskIndex].description = document.getElementById('modalDescriptionInput').value;
-        tasks[taskIndex].tag = document.getElementById('modalTagInput').value;
-        tasks[taskIndex].priority = document.getElementById('modalPriorityInput').value;
-        tasks[taskIndex].cover = document.getElementById('modalCoverInput').value;
-        tasks[taskIndex].startDate = document.getElementById('modalDateStart').value;
-        tasks[taskIndex].endDate = document.getElementById('modalDateEnd').value;
-        tasks[taskIndex].subtasks = tempSubtasks;
-        tasks[taskIndex].comments = tempComments;
-
-        saveAndClose();
-    }
+    save();
+    closeModal();
 }
 
 async function deleteTaskFromModal() {
@@ -731,18 +919,11 @@ async function deleteTaskFromModal() {
         return;
     }
 
-    const confirmed = await showSysConfirm("Tem certeza absoluta que deseja excluir esta tarefa?", "Excluir Tarefa");
-
-    if (confirmed) {
+    if (await showSysConfirm("Tem certeza absoluta que deseja excluir esta tarefa?", "Excluir Tarefa")) {
         tasks = tasks.filter(t => t.id !== editingTaskId);
         save();
         closeModal();
     }
-}
-
-function saveAndClose() {
-    save();
-    closeModal();
 }
 
 function handleSubtaskEnter(e) {
@@ -753,10 +934,12 @@ function handleSubtaskEnter(e) {
 
 function addSubtask() {
     const input = document.getElementById('subtaskInput');
-    const text = input.value.trim();
 
-    if (text) {
-        tempSubtasks.push({ text: text, done: false });
+    if (input.value.trim()) {
+        tempSubtasks.push({
+            text: input.value.trim(),
+            done: false
+        });
         input.value = '';
         renderSubtasksList();
     }
@@ -786,17 +969,13 @@ function removeSubtask(i) {
 
 function addComment() {
     const input = document.getElementById('commentInput');
-    const text = input.value.trim();
-    const currentMember = 'Usuário';
 
-    if (text) {
+    if (input.value.trim()) {
         const now = new Date();
-        const timeString = now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
         tempComments.push({
-            text: text,
-            author: currentMember,
-            date: timeString
+            text: input.value.trim(),
+            author: 'Usuário',
+            date: now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
 
         input.value = '';
@@ -812,7 +991,7 @@ function renderCommentsList() {
         return;
     }
 
-    container.innerHTML = tempComments.map((c) => `
+    container.innerHTML = tempComments.map(c => `
         <div class="comment-item">
             <div class="comment-header">
                 <span>${c.author}</span>
@@ -830,29 +1009,20 @@ function switchDescTab(mode) {
     const btnPreview = document.getElementById('btnPreview');
     const input = document.getElementById('modalDescriptionInput');
     const preview = document.getElementById('descPreview');
-    const micBtn = document.getElementById('descMicBtn');
-
-    if (!btnWrite || !btnPreview) return;
 
     if (mode === 'write') {
         btnWrite.classList.add('active');
         btnPreview.classList.remove('active');
         input.style.display = 'block';
         preview.style.display = 'none';
-
-        if (micBtn) {
-            micBtn.style.display = 'flex';
-        }
+        document.getElementById('descMicBtn').style.display = 'flex';
         input.focus();
     } else {
         btnWrite.classList.remove('active');
         btnPreview.classList.add('active');
         input.style.display = 'none';
         preview.style.display = 'block';
-
-        if (micBtn) {
-            micBtn.style.display = 'none';
-        }
+        document.getElementById('descMicBtn').style.display = 'none';
         preview.innerHTML = simpleMarkdown(input.value);
     }
 }
@@ -871,6 +1041,7 @@ function simpleMarkdown(text) {
 
     lines.forEach(line => {
         let t = line.trim();
+
         if (t.startsWith('- ')) {
             if (!inList) {
                 newLines.push('<ul>');
@@ -882,6 +1053,7 @@ function simpleMarkdown(text) {
                 newLines.push('</ul>');
                 inList = false;
             }
+
             if (t === '') {
                 newLines.push('<br>');
             } else {
@@ -890,7 +1062,10 @@ function simpleMarkdown(text) {
         }
     });
 
-    if (inList) newLines.push('</ul>');
+    if (inList) {
+        newLines.push('</ul>');
+    }
+
     return newLines.join('').replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank">$1</a>');
 }
 
@@ -898,13 +1073,11 @@ async function startVoice(targetId, btnElement) {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-        await showSysAlert("Seu navegador não suporta reconhecimento de voz.");
-        return;
+        return await showSysAlert("Seu navegador não suporta reconhecimento de voz.");
     }
 
     const recognition = new SpeechRecognition();
     recognition.lang = 'pt-BR';
-    recognition.maxAlternatives = 1;
     recognition.start();
 
     btnElement.classList.add('recording');
@@ -921,20 +1094,99 @@ async function startVoice(targetId, btnElement) {
         input.value = input.value.charAt(0).toUpperCase() + input.value.slice(1);
     };
 
-    recognition.onspeechend = () => {
+    recognition.onspeechend = recognition.onerror = () => {
         recognition.stop();
         btnElement.classList.remove('recording');
+
         if (btnElement.classList.contains('btn-mic-small')) {
             btnElement.innerText = originalText;
+        }
+    };
+}
+
+function exportData() {
+    if (currentBoardId) {
+        allBoardsData[currentBoardId] = {
+            tasks: tasks,
+            columns: columns
+        };
+    }
+
+    const dataToExport = JSON.stringify({
+        boards: boards,
+        currentBoardId: currentBoardId,
+        tags: tags,
+        allBoardsData: allBoardsData
+    });
+
+    const blob = new Blob([dataToExport], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `gerenciador-pro-backup-${new Date().getTime()}.json`;
+    document.body.appendChild(a);
+    a.click();
+
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function importData(inputElement) {
+    const file = inputElement.files[0];
+
+    if (!file) {
+        return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = async function (e) {
+        try {
+            const importedData = JSON.parse(e.target.result);
+
+            if (!importedData.allBoardsData) {
+                await showSysAlert("Formato de backup inválido ou antigo. Use apenas backups gerados neste novo sistema.");
+                inputElement.value = '';
+                return;
+            }
+
+            boards = importedData.boards || [];
+            currentBoardId = importedData.currentBoardId;
+            tags = importedData.tags || [];
+            allBoardsData = {};
+
+            for (const [bId, bData] of Object.entries(importedData.allBoardsData)) {
+                allBoardsData[bId] = {
+                    tasks: JSON.parse(bData.tasks_string || "[]"),
+                    columns: JSON.parse(bData.columns_string || "[]")
+                };
+            }
+
+            tasks = allBoardsData[currentBoardId].tasks || [];
+            columns = allBoardsData[currentBoardId].columns || [];
+
+            const currentBoardObj = boards.find(b => b.id === currentBoardId);
+            boardTitle = currentBoardObj ? currentBoardObj.title : 'Meu Quadro';
+            document.getElementById('boardTitle').innerText = boardTitle;
+
+            renderBoardsList();
+            updateTagsDropdown();
+            render();
+
+            syncToFirebase();
+
+            inputElement.value = '';
+            await showSysAlert("Backup restaurado e salvo na nuvem com sucesso!");
+
+        } catch (err) {
+            console.error("Erro na importação:", err);
+            await showSysAlert("Falha ao ler o arquivo. Ele pode estar corrompido ou vazio.");
+            inputElement.value = '';
         }
     };
 
-    recognition.onerror = () => {
-        btnElement.classList.remove('recording');
-        if (btnElement.classList.contains('btn-mic-small')) {
-            btnElement.innerText = originalText;
-        }
-    };
+    reader.readAsText(file);
 }
 
 function setBg(t) {
@@ -986,14 +1238,15 @@ function triggerNotification(t, b) {
 function startTimer() {
     requestNotificationPermission();
 
-    if (isTimerRunning) return;
+    if (isTimerRunning) {
+        return;
+    }
 
     isTimerRunning = true;
+
     timerInterval = setInterval(() => {
         timerSeconds--;
-        const m = Math.floor(timerSeconds / 60);
-        const s = timerSeconds % 60;
-        document.getElementById('pomodoroTimer').innerText = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        document.getElementById('pomodoroTimer').innerText = `${Math.floor(timerSeconds / 60).toString().padStart(2, '0')}:${(timerSeconds % 60).toString().padStart(2, '0')}`;
 
         if (timerSeconds <= 0) {
             clearInterval(timerInterval);
@@ -1013,11 +1266,6 @@ function resetTimer() {
     document.getElementById('pomodoroTimer').innerText = "25:00";
 }
 
-function saveTitle() {
-    boardTitle = document.getElementById('boardTitle').innerText;
-    localStorage.setItem('nexus_title', boardTitle);
-}
-
 function applyFilters() {
     currentTagFilter = document.getElementById('filterTag').value;
     currentPriorityFilter = document.getElementById('filterPriority').value;
@@ -1028,6 +1276,7 @@ function applyFilters() {
 async function updateTagsDropdown() {
     const m = document.getElementById('modalTagInput');
     const f = document.getElementById('filterTag');
+
     m.innerHTML = tags.map(t => `<option value="${t}">${t}</option>`).join('');
     f.innerHTML = `<option value="all">🏷️ Tags</option>` + tags.map(t => `<option value="${t}">${t}</option>`).join('');
     f.value = currentTagFilter;
@@ -1038,22 +1287,26 @@ async function addNewTag() {
 
     if (t && !tags.includes(t)) {
         tags.push(t);
-        localStorage.setItem('nexus_tags', JSON.stringify(tags));
         updateTagsDropdown();
+        syncToFirebase();
     }
 }
 
 function updateMetrics(tl) {
     columns.forEach(c => {
-        const count = tl.filter(t => t.status === c.id).length;
         const el = document.getElementById(`count-${c.id}`);
-        if (el) el.innerText = count;
+        if (el) {
+            el.innerText = tl.filter(t => t.status === c.id).length;
+        }
     });
 
-    const tot = tl.length;
     const doneCol = columns.find(c => c.id === 'done' || c.title.toLowerCase().includes('conclu'));
-    const done = doneCol ? tl.filter(t => t.status === doneCol.id).length : 0;
-    const pct = tot === 0 ? 0 : Math.round((done / tot) * 100);
+    let pct = 0;
+
+    if (tl.length > 0) {
+        const doneCount = doneCol ? tl.filter(t => t.status === doneCol.id).length : 0;
+        pct = Math.round((doneCount / tl.length) * 100);
+    }
 
     document.getElementById('prog-fill').style.width = pct + '%';
     document.getElementById('prog-val').innerText = pct + '%';
@@ -1062,59 +1315,17 @@ function updateMetrics(tl) {
 async function clearAllDone() {
     const doneCol = columns.find(c => c.id === 'done' || c.title.toLowerCase().includes('conclu'));
 
-    if (doneCol && await showSysConfirm("Limpar tarefas concluídas?", "Limpar Tudo")) {
-        tasks = tasks.filter(t => t.status !== doneCol.id);
-        save();
-        toggleMenu();
-    } else if (!doneCol) {
+    if (doneCol) {
+        const confirmed = await showSysConfirm("Limpar tarefas concluídas?", "Limpar Tudo");
+        if (confirmed) {
+            tasks = tasks.filter(t => t.status !== doneCol.id);
+            save();
+            toggleMenu();
+            syncToFirebase();
+        }
+    } else {
         await showSysAlert("Nenhuma coluna de conclusão encontrada.");
     }
-}
-
-function exportData() {
-    const d = JSON.stringify({
-        tasks,
-        tags,
-        columns,
-        boardTitle
-    });
-    const u = 'data:application/json;charset=utf-8,' + encodeURIComponent(d);
-    const a = document.createElement('a');
-    a.href = u;
-    a.download = 'backup.json';
-    a.click();
-}
-
-function importData(i) {
-    const f = i.files[0];
-    if (!f) return;
-
-    const r = new FileReader();
-    r.onload = async function (e) {
-        try {
-            const d = JSON.parse(e.target.result);
-            if (d.tasks) tasks = d.tasks;
-            if (d.tags) {
-                tags = d.tags;
-                localStorage.setItem('nexus_tags', JSON.stringify(tags));
-            }
-            if (d.columns) {
-                columns = d.columns;
-                localStorage.setItem('nexus_columns', JSON.stringify(columns));
-            }
-            if (d.boardTitle) {
-                boardTitle = d.boardTitle;
-                localStorage.setItem('nexus_title', boardTitle);
-            }
-            document.getElementById('boardTitle').innerText = boardTitle;
-            save();
-            updateTagsDropdown();
-            await showSysAlert("Backup restaurado!");
-        } catch (err) {
-            await showSysAlert("Erro ao importar.");
-        }
-    };
-    r.readAsText(f);
 }
 
 function openStatsModal() {
@@ -1134,7 +1345,9 @@ document.getElementById('statsOverlay').addEventListener('click', (e) => {
 
 function renderCharts() {
     const tagCounts = {};
-    tags.forEach(t => tagCounts[t] = 0);
+    tags.forEach(t => {
+        tagCounts[t] = 0;
+    });
 
     tasks.forEach(t => {
         if (tagCounts[t.tag] !== undefined) {
@@ -1148,17 +1361,18 @@ function renderCharts() {
     const dataStatus = [];
 
     columns.forEach(col => {
-        const count = tasks.filter(t => t.status === col.id).length;
         labels.push(col.title);
-        dataStatus.push(count);
+        dataStatus.push(tasks.filter(t => t.status === col.id).length);
     });
 
     const textColor = theme === 'dark' ? '#e6edf3' : '#18181b';
     const chartColors = ['#ff6900', '#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#64748b'];
 
-    const ctxTags = document.getElementById('tagsChart').getContext('2d');
-    if (tagsChartInstance) tagsChartInstance.destroy();
+    if (tagsChartInstance) {
+        tagsChartInstance.destroy();
+    }
 
+    const ctxTags = document.getElementById('tagsChart').getContext('2d');
     tagsChartInstance = new Chart(ctxTags, {
         type: 'doughnut',
         data: {
@@ -1184,9 +1398,11 @@ function renderCharts() {
         }
     });
 
-    const ctxStatus = document.getElementById('statusChart').getContext('2d');
-    if (statusChartInstance) statusChartInstance.destroy();
+    if (statusChartInstance) {
+        statusChartInstance.destroy();
+    }
 
+    const ctxStatus = document.getElementById('statusChart').getContext('2d');
     statusChartInstance = new Chart(ctxStatus, {
         type: 'bar',
         data: {
@@ -1216,23 +1432,36 @@ function renderCharts() {
         }
     });
 
-    const total = tasks.length;
     const doneCol = columns.find(c => c.id === 'done' || c.title.toLowerCase().includes('conclu'));
-    const doneCount = doneCol ? tasks.filter(t => t.status === doneCol.id).length : 0;
-    const pct = total === 0 ? 0 : Math.round((doneCount / total) * 100);
 
-    document.getElementById('statsSummary').innerHTML = `<strong>Total:</strong> ${total} tarefas. <strong>Concluído:</strong> ${pct}%`;
+    let completionPct = 0;
+    if (tasks.length !== 0) {
+        const doneCount = doneCol ? tasks.filter(t => t.status === doneCol.id).length : 0;
+        completionPct = Math.round((doneCount / tasks.length) * 100);
+    }
+
+    document.getElementById('statsSummary').innerHTML = `<strong>Total:</strong> ${tasks.length} tarefas. <strong>Concluído:</strong> ${completionPct}%`;
 }
 
 function getTodayString() {
-    const d = new Date();
-    return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+    const now = new Date();
+    const offset = now.getTimezoneOffset() * 60000;
+    const localDate = new Date(now.getTime() - offset);
+    return localDate.toISOString().split('T')[0];
 }
 
 function formatDate(s) {
-    if (!s) return '';
-    const d = new Date(s);
-    return new Date(d.getTime() + (d.getTimezoneOffset() * 60000)).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    if (s) {
+        const d = new Date(s);
+        const offset = d.getTimezoneOffset() * 60000;
+        const localDate = new Date(d.getTime() + offset);
+        return localDate.toLocaleDateString('pt-BR', {
+            day: '2-digit',
+            month: '2-digit'
+        });
+    } else {
+        return '';
+    }
 }
 
 function fireConfetti() {
